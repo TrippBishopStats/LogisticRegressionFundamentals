@@ -1,0 +1,381 @@
+---
+title: "Logistic Regression Foundations"
+format: 
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+execute:
+  warning: false
+  messages: true
+---
+
+In the general linear model framework (either simple or multiple linear
+regression), the goal is to model the mean response or outcome given a set of
+predictors. This is often written as 
+$$
+\hat{y} = \beta_0 + \beta_1x_1 + \cdots + \beta_px_p,
+$$
+where $\hat{y}$ is the estimated mean response. The goal of the linear model is
+to produce estimates for the parameters $\beta_i$ that produce the line of best
+fit to the data. The equation of the line of best fit represents the predicted
+mean response, $\hat{y}$ given the predictors.
+
+But what if the outcome variable is not continuous, but is rather a categorical
+variable? Perhaps the outcome is whether a patient has some disease or
+if a pest insect is present in an agriculture plot. In these cases the outcome
+could be represented as 0/1, Yes/No, True/False or some other binary measure.
+
+## The Dataset
+The dataset that will be used in this section is the `chdage` date from the
+`aplore3` package that supports the text Applied Logistic Regression by Hosmer,
+Lemeshow and Sturdivant. (2013) It contains data on coronary heart disease (CHD)
+versus age for a high risk population. We will fit a very simple logistic
+regression model to this data to explore the very basics of how logistic
+regression works.
+
+Before fitting any models, an exploratory data analysis should be conducted on
+the data. This serves a few purposes. First, it is form of quality assurance. 
+Are there obvious problems with the data like miscoded values or large amounts
+of missing data? Is the data in a format that can be used directly by the type
+of models we might want to fit to the data? How are the variables distributed?
+
+For now, we will just make a couple of checks starting by a quick glimpse of the
+data.
+```{r initial setup}
+rm(list=ls())
+options(scipen=999) # turn off scientific notation
+library(tidyverse); library(aplore3); library(latex2exp)
+theme_set(theme_bw()) # use the black & white theme for all plots
+# glimpse the data
+chd <- aplore3::chdage
+glimpse(chd)
+```
+Right away, we can see that there are 4 variables. The `id` variable won't be of
+much use to us. We can see that there are two factor variables: `chd` and
+`agegrp`. We are going to want to convert the `chd` variable to numeric with
+values 0 and 1 so that we can plot the values numerically as well as fit a
+linear model, for demonstration purposes.
+
+The `glimpse()` function also shows us that the `agegrp` factor has an issue
+with its levels. There is a level `20-39` that overlaps with the level `30-34`.
+A quick look at the levels, `r levels(chd$agegrp)` shows that the level `20-39`
+should be `20-29`, so this should be fixed. We won't actually use this variable,
+but we'll make the correction anyway.
+
+We will create two new variables, `CHD` and `AgeCat`, that address these issues.
+
+```{r data prep}
+# prep/clean-up the data for use
+chd <- chd |> mutate(
+    # for plotting, make the response a numeric value rather than categorical
+    CHD = if_else(chd == "Yes", 1, 0),
+    # there is an error in the data set where the 20-29 level is indicated as 20-39
+    AgeCat = if_else(agegrp == "20-39", "20-29", agegrp) |> as_factor()
+  ) |> select(CHD, "Age"=age, AgeCat)
+```
+
+Now, the data is ready to use so let's take a look and make a first attempt
+at a model fit.
+
+## Plotting the Data and a Linear Model
+Consider the case where the outcome indicates whether a patient has coronary 
+heart disease or not. If the outcome is coded as 0=no disease and 1=disease, a
+plot of disease presence vs age could look like this:
+
+```{r plot presence v age}
+#| fig-align: "center"
+#| fig-cap: "Presence/absence of coronary heart disease in $n=100$ patients aged 20 to 70 year."
+#| fig-height: 2.5
+ggplot(chd, aes(x=Age, y=CHD)) + geom_point()
+```
+We could fit a linear model to this data to try to estimate the mean probability
+of having CHD at each age. The `lm()` function will happily estimate the
+parameters $\beta_0$ and $\beta_1$ for us, and we can plot the line of best fit
+(in purple) to the data.
+
+$$
+\hat{\pi}_i = \beta_0 + \beta_1\cdot\text{Age}_i.
+$$
+
+:::{.callout-note}
+Probability will be denoted by the Greek lettre $\pi$. You often see $p$ used,
+but $p$ can represent a p-value or the number of predictors in a model ($x_p$,
+for example), so we'll use $\pi$ instead.
+:::
+
+```{r linear fit}
+#| echo: false
+#| fig-align: "center"
+#| fig-height: 2.5
+
+lm.fit <- lm(CHD~Age, data=chd)
+m <- coef(lm.fit)[2]; b <- coef(lm.fit)[1]
+eqn <- paste("$\\widehat{\\pi}_{CHD,i}=", round(b,2)," + ", round(m,2), "Age_i$")
+ggplot(chd, aes(x=Age, y=CHD)) + geom_point() + 
+  geom_abline(slope=m, intercept=b, colour="orchid4", linewidth=1) +
+  annotate("text", x=37,y=0.5, label=TeX(eqn, italic=TRUE), colour="orchid4")
+```
+:::{.callout-note}
+Can you see the problems with this approach?
+:::
+
+There are a couple of clues that trying model probabilities with a linear model
+will not work well. First, on the low end of the age range, the model predicts
+negative probabilities for the presence of CHD. Additionally, it predicts
+probabilities greater than 1 for ages above about 71 years. These results
+clearly don't make any sense.
+
+What we would really like is for probabilities to be bound between 0 and 1 and
+for the line/curve of best fit to asymptotically approach these boundary values.
+A logistic curve can satisfy these constraints. Here is what a generic logistic
+curve looks like:
+```{r}
+#| echo: false
+#| fig-align: "center"
+#| fig-height: 2.5
+x <- 0:100
+y <- exp(-5  + 0.1*x)/(1+exp(-5  + 0.1*x))
+ggplot(tibble(x,y), aes(x,y)) + geom_line(colour="orchid4", linewidth=1) +
+  labs(y=TeX("$f(x)$"))+
+  theme(
+    axis.text=element_blank(),
+    axis.ticks=element_blank()
+  )
+```
+Notice that this function has a bounded range and approaches the boundaries 
+without ever reaching them.
+
+## The Logistic Model
+The logistic function looks like a good candidate for our scenario, but how is
+it described mathematically? First, some definitions. Odds play a prominent role
+in logistic regression, but how are they calculated? It's actually quite easy.
+Odds are defined as the ratio of the probability of an event occurring to the
+probability of that event not occurring. Unlike probabilities which can only
+range between 0 and 1, the odds of an event can range from 0 to infinity. If the
+probability of an event occurring is denoted $\pi$, then the odds are defined as
+
+$$
+\text{odds}=\frac{\pi}{1-\pi}.\tag{1}
+$$
+If we rearrange Equation 1, we get an expression for the probability of the 
+event, $\pi$ in terms of the odds,
+$$
+\pi = \frac{\text{odds}}{1 + \text{odds}}.\tag{2}
+$$
+Now that odds and probability have been defined in terms of each other, we can
+think a bit about how we might model probabilities with the logistic function.
+But before we can do that, we need to know the functional form of the logistic
+function and how we can relate it to odds and probabilities.
+
+The logistic function has this basic form,
+$$
+f(x) = \frac{e^x}{1+e^x}.
+$$
+The $e^x$ term has range $(0,\infty)$, which is a property we know is desirable
+for us: it matches the behaviour of odds. If we think about the denominator, we
+can that as $e^x$ gets really large, then the numerator is *almost* as big as
+the denominator, but not quite. Thus, as $x\to\infty$, the logistic function
+gets closer and closer to 1, but can never equal or exceed 1. Similarly, as
+$x\to -\infty$, then $e^x\to 0$, which means that the logistic function is
+bounded below by 0. This is good news. The logistic function can take on the
+same range of values as probabilities, which is exactly what we're looking for.
+
+Notice that the form of the logistic function looks very similar to the
+definition of probability in terms of odds given in Equation 2. If we
+let $\text{odds}=e^x$, then
+$$
+\pi = \frac{e^x}{1+e^x}.
+$$
+This is a good, start, but what we really want is the conditional probability of the outcome, $Y$, given 
+some set of predictors. If we have collected data on the
+outcome variable and $p$ predictors, then we could replace the placeholder $x$
+in the equation above with the expression 
+$\beta_0 + \beta_1x_1 + \cdots + \beta_px_p$. Now, the probability equation is
+$$
+\pi_i = \frac{e^{\beta_0 + \beta_1x_{1,i} + \cdots + \beta_px_{p,i}}}{1+e^{\beta_0 + 
+\beta_1x_{1,i} + \cdots + \beta_px_{p,i}}}.\tag{3}
+$$
+Equation 3 is known as the logistic response function. You may also see it 
+written as 
+
+$$
+\pi_i = \frac{1}{1+e^{-(\beta_0 +
+\beta_1x_{1,i} + \cdots + \beta_px_{p,i})}}.
+$$
+
+:::{.callout-note}
+Can you show that these two formulations of the logistic response function are
+equivalent?
+:::
+
+At the moment, we have a non-linear function. It would be even better if we could
+model the probability of the outcome given the predictors as a linear function.
+Recall our definition of odds from above. If we look at Equation 3, we see the
+odds are given by $e^{\beta_0 + \beta_1x_{1,i} + \cdots + \beta_px_{p,i}}$. But
+using our definition of the odds, we can construct the following equation:
+$$
+\frac{\pi_i}{1-\pi_i}=e^{\beta_0 + \beta_1x_{1,i} + \cdots + \beta_px_{p,i}}.\tag{4}
+$$
+We can show that Equations 3 and 4 are equivalent with some algebra.
+
+$$
+\begin{aligned}
+\pi &= \frac{e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}\\
+\frac{\pi}{1-\pi} &= \frac{e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}\cdot\frac{1}{1-\pi}\\
+\frac{\pi}{1-\pi} &= \frac{e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}\cdot\frac{1}{1-\frac{e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}}\\
+\frac{\pi}{1-\pi} &= \frac{e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}\cdot\frac{1}{(\frac{1}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}})(1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}-e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p})}\\
+\frac{\pi}{1-\pi} &= \frac{e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}\cdot\frac{1+e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}}{1}\\
+\frac{\pi}{1-\pi} &= e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p}.
+\end{aligned}
+$$
+If we take the log of both sides of the equation, 
+$$
+\log\bigg(\frac{\pi}{1-\pi}\bigg)=\log(e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p})= \beta_0 + \beta_1x_1 + \cdots + \beta_px_p,
+$$
+we have a function of the log odds that is linear in terms of the
+parameters $\beta_i$. The expression on the left side of the equation is often
+called the logit and it is common to see the above equation written as
+$$
+\text{logit}(\pi)=\beta_0 + \beta_1x_1 + \cdots + \beta_px_p.\tag{5}
+$$
+
+## Fitting a Simple Logistic Regression Model
+Returning the coronary heart dataset, suppose that we want to fit a model that
+predicts the presence of CHD in a high risk population of adults using their age
+as the explanatory variable. The formal model will be
+$$
+\begin{aligned}
+Y_i&\sim bin(1, \pi_i)\\[0.25cm]
+\pi_i &= \frac{\exp(\eta_i)}{1+\exp(\eta_i)}=\frac{1}{1 + \exp(-\eta_i)}\\[0.25cm]
+\eta_i &= \beta_0 + \beta_1\cdot Age_i.
+\end{aligned}
+$$
+
+The model fit is carried out with the `glm()` function in R. The arguments to this
+function are similar to those of the `lm()` function for fitting linear models
+with a normal response, with the exception of the `family` argument. This
+argument tells the `glm()` function that the response has a binomial
+distribution and that the `link` function is the logit. The link function
+relates the mean response to the linear equation of parameters. In the standard
+linear model, the link function is the identity function, so the mean is
+directly related to the linear function of parameters. In logistic regression,
+the mean response ($\pi$) is related to the linear predictor ($\eta$) by the
+logit function. In other words, $\text{logit}(\pi_i)=\eta_i$. The expression
+`family=binomial(link=logit)` in the `glm()` call below is R's way of telling
+`glm()` that we want to fit a logistic regression model described by the formula
+`CHD ~ Age` with the dataset `chd`.
+
+Running the R code (click Show the code to see the actual R code used to fit the model)
+below produces the following model output:
+
+```{r fitting a LR}
+lr.fit <- glm(CHD ~ Age, data=chd, family=binomial(link=logit))
+summary(lr.fit)
+```
+
+How do we interpret this model summary?
+
+### Interpreting the Estimated Model Parameters
+For now, we're going to limit ourselves to the `coefficients` section of the
+model summary output and in particular the `Estimate` column. The estimated model equation is $\text{logit}(\hat{\pi}_i) = -5.31 + 0.11\cdot\text{Age}_i$. 
+The intercept term is $\hat{\beta}_0=-5.31$ and the slope coefficient associated
+with age is $\hat{\beta}_1=0.11$. The $\hat{ }$ symbol over the two $\beta$
+terms indicates that the value is an estimate of the unknown population
+coefficient $\beta_i$.
+
+The intercept parameter estimate tells us the log odds of having CHD when `Age`
+is zero years:
+
+$$
+\text{logit}(\hat{\pi}_i) = \hat{\beta}_0 + \hat{\beta}_1\cdot\text{Age}_i=-5.31 + 0.11(0) = -5.31.
+$$
+If we exponentiate both sides of this equation, we obtain the odds of having CHD when aged 0 years:
+$$
+\exp[\text{logit}(\hat{\pi}_i)] = \exp[\hat{\beta}_0 + \hat{\beta}_1\cdot\text{Age}_i]=\exp[-5.31 + 0.11(0)] = \exp[-5.31] = 0.00494.
+$$
+The intercept is not meaningful in this case as an age of zero years doesn't 
+make sense. We could change this by centring the age variable around its mean. 
+Using a centred age, the intercept would present an individual who is of the average
+age in the dataset and this *would* be meaningful. Centring `Age` will not change
+the value of the slope parameter estimate, $\hat{\beta}_1$. We will look at 
+centring data in a more realistic example soon.
+
+How do we interpret the slope parameter estimate for `Age`, $\hat{\beta}_1$? We
+see that the log odds of having CHD increase by 0.11 for every one year increase
+in age. Consider the log odds of having CHD for an individual of age $\text{Age}_i + 1$
+compared to an individual of age $\text{Age}_i$.
+$$
+\begin{aligned}
+\log\bigg(\frac{\hat{\pi}_i}{1-\hat{\pi}_i}\bigg) &= \hat{\beta}_0 + \hat{\beta}_1\cdot(\text{Age}_i + 1)\\[0.25cm]
+\log\bigg(\frac{\hat{\pi}_i}{1-\hat{\pi}_i}\bigg) &= \hat{\beta}_0 + \hat{\beta}_1\cdot(\text{Age}_i)
+\end{aligned}
+$$
+We can compare these two log odds with a ratio. To simplify the notation, the
+odds for the individual of age $\text{Age} + 1$ will be denoted $O_{A}$ and the
+odds for the individual of age $\text{Age}$ will be denoted $O_{B}$.
+
+$$
+\begin{aligned}
+\log\bigg(\frac{O_A}{O_B}\bigg) &= \log(O_A) - \log(O_B)\\[0.25cm] 
+&= \hat{\beta}_0 + \hat{\beta}_1\cdot(\text{Age}_i + 1) - [\hat{\beta}_0 + \hat{\beta}_1\cdot(\text{Age}_i)]\\[0.25cm]
+&= \hat{\beta}_1\cdot(\text{Age}_i + 1) - \hat{\beta}_1\cdot(\text{Age}_i)\\[0.25cm]
+&= \hat{\beta}_1(\text{Age}_i + 1 - \text{Age}_i)\\[0.25cm]
+&= \hat{\beta}_1
+\end{aligned}
+$$
+The problem with log odds is that it's not very easy to interpret. Typically,
+odds ratios are used instead because they are easier for most people to
+understand. In the case of our model, if we want the odds ratio of developing
+CHD for a one year increase in `Age`, we just exponentiate both sides of this
+equation:
+
+$$
+\begin{aligned}
+&\exp\bigg[\log\bigg(\frac{O_A}{O_B}\bigg)\bigg] =\exp[\hat{\beta}_1]\\[0.25cm]
+&\frac{O_A}{O_B} = e^{\hat{\beta}_1} = e^{0.11} = 1.116.
+\end{aligned}
+$$
+There are a couple of ways that this can be communicated to an audience. We
+could say that the odds of CHD increase 1.16 times for a one year increase in
+`Age`. We could also state the change as a percentage. The odds of the presence
+of CHD increase 11.6% for a one year increase in `Age`.
+
+To compute the percentage, simply subtract 1 from the odds ratio: 
+$e^{\beta_1} - 1 = 0.116$ then multiply by 100 to get the percentage. If 
+$e^{\beta_1} < 1$, then $e^{\beta_1} - 1 < 0$ and the odds of the presence of 
+CHD would decrease with increasing `Age`.
+
+## Using the Model to Make Predictions
+We can get the estimated mean value, $\pi_i$ for our model using the
+`predict()` function in R. Using `type=response` returns the probabilities. If we
+wanted to get classifications (disease/no disease), we could specify 
+`type=class` instead. More on classifications later. We can also compute the
+estimated mean values using the logistic response function that was defined in
+Equation 3. Comparing the output from the `predict()` function and the "hand"
+calculation, the results are identical.
+
+Let's say that we wanted to compute the predicted probability of having CHD for a
+57 year old in the high risk population the observed data were sampled from. To
+do this we can use the `predict()` function with a new vector of data.
+
+Using R, we get the following result.
+```{r prediction with R}
+xh <- data.frame(Age=57)
+predict(lr.fit, newdata=xh, type="response") |> unname()
+```
+We can check this against the simplified version of Equation 3:
+
+$$
+\hat{\pi}_h = \frac{1}{1+\exp[-(-0.531 + 0.11(57))]}
+$$
+```{r prediciton by hand}
+# extract the parameter coefficient estimates from the model
+b <- coef(lr.fit) |> unname()
+1/(1 + exp(-(b[1] + b[2]*57)))
+```
+
+... and we get the same result "by hand". So, on average, a 57 year old in this
+high risk population has about a 73% chance of having coronary heart disease.
+
+Up next: We will look at a more complex model using the 
+[Framingham Heart Study](multiple-logistic-regression.html) dataset.

@@ -1,0 +1,33 @@
+---
+title: " Multiple Logistic Regression"
+format: 
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+execute:
+  warning: false
+  messages: true
+---
+
+```{r initial setup}
+library(tidyverse)
+chd <- read_csv("framingham.csv")
+
+glimpse(chd)
+
+skimr::skim(chd)
+
+complete.cases(chd) |> sum()
+```
+
+
+**Cite these guys:** [Framingham Heart Study - CHD Risk Prediction](https://github.com/KomlaAkpalu/Framingham-CoronaryHeartDisease-Modeling/tree/main)
+
+
+
+$$
+\begin{aligned}
+Y_i&\sim Bern(\pi_i)\\
+\eta &= \textbf{X}\underline{\beta}
+\end{aligned}
+$$

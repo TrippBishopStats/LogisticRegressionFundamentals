@@ -1,0 +1,22 @@
+---
+title: "Logist Regression Fundamentals"
+---
+
+# Introduction
+Logistic regression is an important tool for anyone who needs to answer research
+questions involving binary outcomes or to make predictions involving the
+classification of observations. It is used widely in a whole host of disciplines
+including medical research, ecology and the social sciences. The purpose of this
+guide is to walk you through the process of learning the main concepts behind
+logistic regression: what kinds of questions it can be applied to, how to 
+implement a logistic regression model in R, and more advanced concepts like
+model selection and cross-validation.
+
+This guide is broken down into 5 stages
+
+1) The Foundation: The fundamental concepts of logistic regression are explained through the lens of a very simple model.
+2) A research question: Building on the foundation, a research question is answered with a more complex model.
+3) Model selection:
+4) Cross-validation:
+
+Let's [get started](logistic-regression-foundations.html)!
