@@ -12,7 +12,16 @@ logistic regression: what kinds of questions it can be applied to, how to
 implement a logistic regression model in R, and more advanced concepts like
 model selection and cross-validation.
 
-This guide is broken down into 5 stages
+## Prerequisites
+This guide on logistic regression assumes that you are already familiar with the
+basic theory and interpretation of simple and multiple linear regression models
+and know how to fit them using the `lm()` function in R. Knowlegde of how to
+identify confounders and mediators is also helpful. See 
+[Effects Models - Dealing with Confounders](confounders.html) for an 
+introduction to these concepts if they are new to you.
+
+## Guide Structure
+This guide is broken down into 5 stages:
 
 1) The Foundation: The fundamental concepts of logistic regression are explained through the lens of a very simple model.
 2) A research question: Building on the foundation, a research question is answered with a more complex model.
