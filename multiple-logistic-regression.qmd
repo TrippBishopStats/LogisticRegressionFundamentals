@@ -18,16 +18,204 @@ glimpse(chd)
 skimr::skim(chd)
 
 complete.cases(chd) |> sum()
+
+chd <- chd |> 
+  mutate(
+    sex = if_else(male == 1, "Male", "Female") |> factor(levels=c("Female", "Male")),
+    smoker = if_else(currentSmoker == 1, "Yes", "No") |> as_factor(),
+    haschd = if_else(TenYearCHD == 1, "Yes", "No") |> as_factor(),
+  )
+
+chd <- chd[complete.cases(chd),]
 ```
 
 
 **Cite these guys:** [Framingham Heart Study - CHD Risk Prediction](https://github.com/KomlaAkpalu/Framingham-CoronaryHeartDisease-Modeling/tree/main)
 
 
+```{r}
+boxplot(age ~ smoker, data=chd)
+```
 
-$$
-\begin{aligned}
-Y_i&\sim Bern(\pi_i)\\
-\eta &= \textbf{X}\underline{\beta}
-\end{aligned}
-$$
+
+
+
+```{r}
+chisq.test(x=chd$male, y=chd$currentSmoker)
+table(chd$sex, chd$smoker) |> prop.table(margin=1)
+```
+Fitting an intial model with potentially important variables. It includes
+variables that might be confounders, mediators and independent predictors.
+
+```{r}
+lr.modA <- glm(haschd ~ smoker + sex + age + totChol + glucose + BMI + prevalentHyp, 
+    data=chd, family=binomial)
+summary(lr.modA)
+```
+The first covariate we'll consider is `BMI`. Thinking about the potential causal
+direction, it does not make sense that a person's BMI would influence whether
+they smoke or not. However, smoking does influence `BMI` and thus `BMI` may
+mediate smoking's influence on CHD risk.
+
+```{r}
+lr.modB <- glm(haschd ~ smoker + sex + age + totChol + glucose + prevalentHyp, 
+    data=chd, family=binomial)
+summary(lr.modB)
+```
+The removed of `BMI` did not substantially change the parameter coefficient
+associated with smoking or its standard error. It is worth comparing the two
+models to see if the model that includes BMI is preferred over the one that does
+not.
+
+```{r}
+anova(lr.modB, lr.modA, test="LRT")
+```
+There is no evidence that the model that contains `BMI` is a better fit to the
+data than the reduced model ($\chi^2_1=2.0788$, $p=0.1494$). Model B will become
+our working model.
+
+The next variable under consideration will be prevalence of hypertension at
+baseline. Again, this variable is a likely mediator as the direction of
+causality is from smoking to hypertension, not the other way around.
+
+```{r model c}
+lr.modC <- glm(haschd ~ smoker + sex + age + totChol + glucose, 
+    data=chd, family=binomial)
+summary(lr.modC)
+```
+
+```{r}
+anova(lr.modC, lr.modB, test="LRT")
+```
+The likelihood ratio test indicates that `prevalentHyp` should be retained in
+the model ($\chi^2_1=45.564$, $p<0.0001$). There does not appear to be a strong
+mediating effect, the log odds of CHD actually decrease from 0.373 to 0.337
+(about a 10% decrease) when `prevalentHyp` is removed from the model. While 
+`prevalentHyp` appears to be potential predictor for predicting CHD, it doesn't
+appear to be a confounder or a mediator. Since its inclusion in the model does
+not appear to substantially change the standard error for `smoker`, it will be
+removed from the model for reasons of parsimony.
+
+Next, `glucose` is investigated as an independent predictor. There doesn't seem
+to be any compelling association between blood sugar levels and smoking.
+
+```{r model d}
+lr.modD <- glm(haschd ~ smoker + sex + age + totChol, 
+    data=chd, family=binomial)
+summary(lr.modD)
+```
+Removal of glucose does not result in a major change to the estimated parameter
+coefficient for smoking, nor does the standard error of the coefficient change
+much.
+
+```{r C vs D}
+anova(lr.modD, lr.modC, test="LRT")
+```
+The likelihood ratio test suggests that `glucose` should be retained in the
+model, but for estimating the effect of smoking on CHD, it does not seem
+necessary to retain it.
+
+There is some evidence that smoking increases total cholesterol and thus 
+`totChol` would act as a mediator.
+
+
+```{r model e}
+lr.modE <- glm(haschd ~ smoker + sex + age, 
+    data=chd, family=binomial)
+summary(lr.modE)
+```
+There is very little change in the estimated parameter coefficient for smoking
+when `totChol` is removed from the model. Standard errors change only very slightly.
+
+```{r E vs D}
+anova(lr.modE, lr.modD, test="LRT")
+```
+The likelihood ratio test indicates that `totChol` should be retained in the
+model ($\chi^2_1=9.9658$, $p=0.0016$). Since there does not seem to be any real
+mediating or confounding effect, it will be dropped for parsimony.
+
+Next, the `age` variable will be considered. This variable along with `sex` is a
+common confounder in many situations. We saw earlier that there are is a
+systematic difference in the age of smokers and non-smokers, with non-smokers
+tending to be younger than smokers. This leads me to suspect that there will be
+a change in the apparent effect of smoking on the odds of having CHD if age is
+removed from the model.
+
+```{r model F}
+lr.modE <- glm(haschd ~ smoker + sex, 
+    data=chd, family=binomial)
+summary(lr.modE)
+```
+There is a major change in the estimated parameter coefficient for smoking when
+`age` is removed from the model. The effect of smoking on the odds of having CHD
+essentially disappears. This is likely due to the fact that 
+
+```{r}
+ggplot(data=chd, aes(x=haschd, y=age, colour=smoker)) + geom_boxplot()
+```
+
+
+## Low Birth Weight - Smoking Effect
+
+Things to consider when examining different proposed effects models for
+quantifying the effect of smoking on the odds of a low birth weight:
+
+- Conceptually, does it make sense that there would be an association between the treatment and the variable in question?
+  - Is the variable in question a confounder or a mediator?
+- Is the variable in question likely to be a strong independent predictor of low birth weight?
+
+The first consideration relates to confounding. We want to keep confounders in
+the model regardless of whether they improve the model or not. The goal is not
+prediction here, it's understanding the effect of our treatment on the outcome.
+Strong independent predictors may shrink the standard error of treatment, making
+the estimate more precise. We definitely want to keep such predictors in the
+model even though we aren't too interested in their role in predicting the
+outcome because our focus is not prediction here.
+
+### The Dataset
+
+```{r}
+library(aplore3)
+glimpse(lowbwt)
+```
+
+```{r}
+skimr::skim(lowbwt)
+```
+
+
+### Univariate EDA
+
+```{r}
+with(lowbwt, hist(age))
+```
+
+```{r}
+with(lowbwt, hist(lwt))
+```
+
+```{r}
+with(lowbwt, table(race))
+```
+
+```{r}
+with(lowbwt, table(smoke))
+```
+
+```{r}
+with(lowbwt, table(ftv))
+```
+
+```{r}
+with(lowbwt, table(ptl))
+```
+
+```{r}
+with(lowbwt, table(ht))
+```
+
+
+```{r}
+with(lowbwt, table(ui))
+```
+
