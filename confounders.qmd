@@ -398,7 +398,7 @@ confounder can bias the effect of the treatment.
 :::
 
 [^FoTW]: This expression comes from the excellent book Thinking Clearly with
-Data. I find that it is a very intiutive and accessible way to refer to what
+Data. I find that it is a very intuitive and accessible way to refer to what
 will become the columns of a dataset: the variables that we collect data on and
 have research questions about. I will use it interchangeable with "variable"
 throughout this guide. [@bueno_de_mesquita_thinking_2021]
