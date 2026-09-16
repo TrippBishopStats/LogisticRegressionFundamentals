@@ -1,0 +1,104 @@
+---
+title: "Mediators in Effects Models"
+format: 
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+bibliography: confounding-references.bib
+execute:
+  warning: false
+  messages: false
+---
+
+```{r initial setup}
+#| echo: false
+rm(list=ls()); library(tidyverse)
+options(scipen=999)
+```
+
+## What is a Mediator?
+A mediator is the mechanism by which some feature of the world [^FoTW], the 
+treatment, affects another feature of the world, the outcome. The effect of the
+treatment may be thought of as "flowing through" the mediator in whole or in
+part. The diagram below depicts this graphically.
+
+![Path Diagram of a confounding reationship](images/mediation.svg){width=50%}
+When constructing an effects model to investigate the effect of the treatment on
+the outcome, it may be useful to include mediators in the model if a more 
+granular analysis of the treatment effect is desired. However, if the total
+effect of the treatment is the goal, then any mediators should be excluded from
+the model. When constructing an effects model, it is important to understand the
+relationships between the treatment variable and the other predictors in the
+model be they mediators, [confounders](confounders.html) or 
+[independent predictors](independent-predictors.html). The decision to include 
+or exclude specific predictors should be weighed against their conceptual
+relationships with the treatment and the outcome. Including predictors into the
+model without forethought risks creating a biased estimate of the treatment
+effect.
+
+## Example - The Effect of Cylinder Count on Fuel Consumption
+Imagine that you have been asked by an engine design company to investigate the
+effect of the number of cylinders in an internal combustion engine and the fuel
+consumption measured in miles per gallon (`mpg`). The company provides you a
+dataset containing 6 variables on 32 different vehicle models. They have asked
+you to build an effects model and to identify any important mediators and/or
+independent predictors that help establish the effect of the number of engine
+cylinders on fuel consumption. If there are any mediators, they would like to 
+know the partial effect of these predictors as well.
+
+The dataset you are provided has the following variables: `mpg`, `cyl`, `disp`, 
+`wt`, `gear` and `am` where
+
+- `mpg`: Miles/(US) gallon  
+- `cyl`: Number of cylinders  
+- `disp`: Displacement (cu.in.)  
+- `wt`: Weight (1000 lbs)  
+- `gear`: Number of forward gears  
+- `am`: Transmission (0 = automatic, 1 = manual)  
+
+
+
+
+
+
+
+```{r}
+df <- mtcars |> 
+  select(mpg, cyl, disp, wt, gear, am) |> 
+  mutate(
+    cyl = as_factor(cyl),
+    gear = as_factor(gear),
+    am = as_factor(am)
+  )
+lm(mpg~cyl+gear, data=df) |> summary()
+lm(mpg~cyl+am, data=df) |> summary()
+lm(mpg~cyl, data=df) |> summary()
+```
+
+
+```{r}
+lm(mpg~cyl, data=df) |> summary()
+
+lm(mpg~cyl+disp, data=df) |> summary()
+
+lm(mpg~cyl+wt, data=df) |> summary()
+
+lm(mpg~cyl+wt+disp+gear+am, data=df) |> summary()
+```
+
+
+## In Summary
+
+Summarise what it means to be a mediator and the reasons that we might want to
+include or exclude mediators from an effects model.
+
+## References
+
+::: {#refs}
+:::
+
+[^FoTW]: This expression comes from the excellent book Thinking Clearly with
+Data. I find that it is a very intuitive and accessible way to refer to what
+will become the columns of a dataset: the variables that we collect data on and
+have research questions about. I will use it interchangeable with "variable"
+throughout this guide. [@bueno_de_mesquita_thinking_2021]
