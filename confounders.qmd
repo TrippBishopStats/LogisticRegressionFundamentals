@@ -45,8 +45,8 @@ is being assessed.
 :::{.callout-warning}
 Confounder relationships should be carefully considered conceptually rather than
 numerically. Does the proposed causal relationship and direction of influence 
-make sense? These considerations are more important than numerical associates in
-your data.
+make sense? These considerations are more important than numerical associations
+in your data.
 :::
 
 You have probably heard the expression "correlation does not imply causation".
