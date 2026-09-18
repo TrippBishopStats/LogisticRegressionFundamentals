@@ -12,7 +12,7 @@ execute:
 
 ```{r initial setup}
 #| echo: false
-rm(list=ls()); library(tidyverse)
+rm(list=ls()); 
 options(scipen=999)
 ```
 
@@ -22,7 +22,8 @@ treatment, affects another feature of the world, the outcome. The effect of the
 treatment may be thought of as "flowing through" the mediator in whole or in
 part. The diagram below depicts this graphically.
 
-![Path Diagram of a confounding reationship](images/mediation.svg){width=50%}
+![Path Diagram of a mediation reationship](images/mediation.svg){width=50%}
+
 When constructing an effects model to investigate the effect of the treatment on
 the outcome, it may be useful to include mediators in the model if a more 
 granular analysis of the treatment effect is desired. However, if the total
@@ -56,13 +57,38 @@ The dataset you are provided has the following variables: `mpg`, `cyl`, `disp`,
 - `gear`: Number of forward gears  
 - `am`: Transmission (0 = automatic, 1 = manual)  
 
+### Considering Potential Relationships
+Prior to building any statistical models, it is important to consider and
+classify any potential relationships between the treatment, response and the
+other variables in the dataset. First, is it reasonable to assume that the two
+variables in questions have some sort of relationship? If so, is it plausible,
+or well established in the literature, that there is a causal relationship
+between them? What is the direction of causality? If assessing the treatment and
+a potential covariate, if the two are independent, is it reasonable to conclude
+that the covariate has an association with the response? We will use this line
+of reasoning to assess the variables in our hypothetical situation.
 
+### Number of Cylinders and Displacement
+We start by considering if the number of cylinders in an engine is associated 
+with the engine's displacement. Here, it helps to know the definition of engine
+displacement: Displacement is a measure of the volume of air swept through the 
+cylinders by the pistons during one complete cycle. It is typically measured in
+litres or cubic inches. Clearly there is an association between the number of
+cylinders and the displacement of an engine. It is also reasonable to conclude
+that the number of cylinders causes the displacement by the definition of
+displacement. 
 
+If we look at a boxplot of `cyl` v `disp` it is clear that there are baseline
+differences in the displacement based on the number of cylinders in the engine,
+and the change in displacement is in the direction we expect: engines with more
+cylinders have larger displacements.
 
+```{r cyl v disp}
+#| fig-align: "center"
+#| fig-height: 3.5
+library(tidyverse); library(latex2exp)
+theme_set(theme_bw()) # set base theme for all plots
 
-
-
-```{r}
 df <- mtcars |> 
   select(mpg, cyl, disp, wt, gear, am) |> 
   mutate(
@@ -70,6 +96,104 @@ df <- mtcars |>
     gear = as_factor(gear),
     am = as_factor(am)
   )
+
+ggplot(data=df, aes(x=cyl, y=disp)) +
+  geom_boxplot(outliers=FALSE) +
+  geom_jitter(alpha=0.5, width=0.25) +
+  labs(
+    y=TeX("Displacement ($inches^3$)"),
+    x="Number of cylinders"
+  )
+```
+Larger engines have more cylinders which means that they have larger
+displacements. Is there an association between engine displacement and fuel
+consumption? This certainly seems plausible. Larger engines are more powerful
+and it seems likely that they also consume more fuel.
+
+```{r}
+#| fig-align: "center"
+#| fig-height: 3.5
+ggplot(data=df, aes(x=disp, y=mpg)) +
+  geom_point() +
+  labs(
+    y="Fuel consumption (mpg)",
+    x=TeX("Displacement ($inches^3$)")
+  )
+```
+There is clearly a strong, negative (and nonlinear) association between `disp`
+and `mpg`. It seems reasonable to think that engine displacement mediates the
+relationship between the number of cylinders and fuel consumption. Engine 
+displacement is in the path between the treatment, number of cylinders and the
+outcome, fuel consumption. It is a mechanism by which the number of cylinders
+affects the fuel consumption of the engine.
+
+![Displacement is a mechanism of fuel consumption](images/Cylinder_Displacement_Mediation.svg){width=50%}
+Is engine displacement the only mechanism by which the number of cylinders 
+affects fuel consumption?
+
+### Number of Cylinders and Vehicle Weight
+An association between the number of cylinders in the engine and total vehicle
+weight seems quite plausible. It also seems reasonable that this association
+might not be as strong as that between the number of cylinders and engine
+displacement as there are factors other than the engine size which influence the
+overall weight of a vehicle. While this association is less clear cut, the plot
+below clearly shows that there is difference in baseline weight for the different
+number of cylinders. Conceptually it makes sense that engines with more cylinders
+will cause the overall weight of the vehicle to increase because larger engines
+are heavier.
+
+```{r cyl v wt}
+#| fig-align: "center"
+#| fig-height: 3.5
+ggplot(data=df, aes(x=cyl, y=wt)) +
+  geom_boxplot(outliers=FALSE) +
+  geom_jitter(alpha=0.5, width=0.25) +
+  labs(
+    y="Weight (1000s lbs)",
+    x="Number of cylinders"
+  )
+```
+Since a heavier vehicle consumes more fuel, all else being equal, it seems 
+reasonable that weight might partially mediate the relationship between the
+number of cylinders in the engine and the overall weight of a vehicle.
+
+![Weight is a mechanism of fuel consumption](images/Cylinder_Weight_Mediation.svg){width=50%}
+
+There is a clear, strong and negative association between vehicle weight and
+fuel consumption as seen in the plot below, which lends credence to the notion
+that weight is a mediator between number of engine cylinders and fuel
+consumption.
+
+```{r mpg v wt}
+#| fig-align: "center"
+#| fig-height: 3.5
+ggplot(data=df, aes(x=wt, y=mpg)) +
+  geom_point() +
+  labs(
+    y="Fuel consumption (mpg)",
+    x="Weight (1000s lbs)"
+  )
+```
+
+### Number of Cylinders and Number of Gears and Transmission
+There may be associations between these variables due to consumer preferences or
+other economic considerations, but it doesn't seem plausible that the number of
+cylinders would dictate the number of gears or the transmission type. The 
+reverse causal path also seems implausible. That said, these two variables may 
+be useful [independent predictors](independent-predictors.html) that we may want
+in the model and so their impact on the estimate of the effect of the number of
+cylinders as well as on the standard error of that estimate will be assessed.
+
+## The Initial Estimated Effects Model
+
+
+
+
+![Initial effects model](images/Initial_Effects_Model.svg){width=50%}
+
+
+
+```{r}
 lm(mpg~cyl+gear, data=df) |> summary()
 lm(mpg~cyl+am, data=df) |> summary()
 lm(mpg~cyl, data=df) |> summary()
