@@ -22,7 +22,7 @@ treatment, affects another feature of the world, the outcome. The effect of the
 treatment may be thought of as "flowing through" the mediator in whole or in
 part. The diagram below depicts this graphically.
 
-![Path Diagram of a mediation reationship](images/mediation.svg){width=50%}
+![Path Diagram of a mediation reationship.](images/mediation.svg){width=50%}
 
 When constructing an effects model to investigate the effect of the treatment on
 the outcome, it may be useful to include mediators in the model if a more 
@@ -37,14 +37,14 @@ relationships with the treatment and the outcome. Including predictors into the
 model without forethought risks creating a biased estimate of the treatment
 effect.
 
-## Example - The Effect of Cylinder Count on Fuel Consumption
+## Example - The Effect of Cylinder Count on Fuel Economy
 Imagine that you have been asked by an engine design company to investigate the
 effect of the number of cylinders in an internal combustion engine and the fuel
 consumption measured in miles per gallon (`mpg`). The company provides you a
 dataset containing 6 variables on 32 different vehicle models. They have asked
 you to build an effects model and to identify any important mediators and/or
 independent predictors that help establish the effect of the number of engine
-cylinders on fuel consumption. If there are any mediators, they would like to 
+cylinders on fuel economy. If there are any mediators, they would like to 
 know the partial effect of these predictors as well.
 
 The dataset you are provided has the following variables: `mpg`, `cyl`, `disp`, 
@@ -116,20 +116,21 @@ and it seems likely that they also consume more fuel.
 ggplot(data=df, aes(x=disp, y=mpg)) +
   geom_point() +
   labs(
-    y="Fuel consumption (mpg)",
+    y="Fuel economy (mpg)",
     x=TeX("Displacement ($inches^3$)")
   )
 ```
 There is clearly a strong, negative (and nonlinear) association between `disp`
 and `mpg`. It seems reasonable to think that engine displacement mediates the
-relationship between the number of cylinders and fuel consumption. Engine 
+relationship between the number of cylinders and fuel economy. Engine 
 displacement is in the path between the treatment, number of cylinders and the
-outcome, fuel consumption. It is a mechanism by which the number of cylinders
-affects the fuel consumption of the engine.
+outcome, fuel economy. It is a mechanism by which the number of cylinders
+affects the fuel economy of the engine.
 
-![Displacement is a mechanism of fuel consumption](images/Cylinder_Displacement_Mediation.svg){width=50%}
+![Displacement is a mechanism of fuel economy.](images/Cylinder_Displacement_Mediation.svg){width=50%}
+
 Is engine displacement the only mechanism by which the number of cylinders 
-affects fuel consumption?
+affects fuel economy?
 
 ### Number of Cylinders and Vehicle Weight
 An association between the number of cylinders in the engine and total vehicle
@@ -157,10 +158,10 @@ Since a heavier vehicle consumes more fuel, all else being equal, it seems
 reasonable that weight might partially mediate the relationship between the
 number of cylinders in the engine and the overall weight of a vehicle.
 
-![Weight is a mechanism of fuel consumption](images/Cylinder_Weight_Mediation.svg){width=50%}
+![Weight is a mechanism of fuel economy](images/Cylinder_Weight_Mediation.svg){width=50%}
 
 There is a clear, strong and negative association between vehicle weight and
-fuel consumption as seen in the plot below, which lends credence to the notion
+fuel economy as seen in the plot below, which lends credence to the notion
 that weight is a mediator between number of engine cylinders and fuel
 consumption.
 
@@ -170,7 +171,7 @@ consumption.
 ggplot(data=df, aes(x=wt, y=mpg)) +
   geom_point() +
   labs(
-    y="Fuel consumption (mpg)",
+    y="Fuel economy (mpg)",
     x="Weight (1000s lbs)"
   )
 ```
@@ -185,36 +186,93 @@ in the model and so their impact on the estimate of the effect of the number of
 cylinders as well as on the standard error of that estimate will be assessed.
 
 ## The Initial Estimated Effects Model
-
-
-
+The causal model that we will investigate posits that the number of cylinders,
+which is the treatment, acts on fuel economy, the outcome, through at least
+two mechanism: engine displacement, vehicle weight and potentially directly. In
+addition, there are two independent predictors: the number of forward gears and
+the transmission type. We are explicitly stating that there are no interactions
+between the treatment and other predictors in the model.
 
 ![Initial effects model](images/Initial_Effects_Model.svg){width=50%}
 
+To examine this model, we start by fitting the full model:
 
+$$
+\text{mpg}_i = \beta_0 + \beta_1I_{cyl6} + \beta_2I_{cyl8} + \beta_3x_{disp,i} + \beta_4x_{wt,i} + \beta_5I_{gear4} + \beta_6I_{gear5} + \beta_7I_{auto} + E_i.
+$$
+
+```{r fit full model}
+mod.full <- lm(mpg~cyl+wt+disp+gear+am, data=df)
+CI <- confint(mod.full) |> round(2) # get the 95% CIs for display in the report.
+mod.full |> summary()
+```
+There is evidence that the number of cylinders has an impact on fuel
+consumption, with additional cylinders resulting in an decrease in fuel economy
+(lower `mpg`). The weight mechanism is reliably different to zero 
+($p=0.0166$, $CI_{95\%}[`r CI[4,1]`,`r CI[4,2]`]$) and we can expect that, on 
+average, for a 1000lb increase in overall vehicle weight, the fuel economy
+decreases by 3.58 miles per gallon. There is no evidence in this data that the
+slope coefficient associated with engine displacement is different to zero
+($p=0.7356$, $CI_{95\%}[`r CI[5,1]`,`r CI[5,2]`]$). However, because we are 
+interested the effect of the treatment through the known mediators it will be 
+retained in the model.
+
+Vehicles with four ($p=0.8472$, $CI_{95\%}[`r CI[6,1]`,`r CI[6,2]`]$) or five 
+($p=0.5170$, $CI_{95\%}[`r CI[7,1]`,`r CI[7,2]`]$) forward gears do not, on
+average, have fuel economies that are different to vehicles with only 3 forward
+gears. Similarly, there is no evidence of an effect of transmission type 
+($p=0.6983$, $CI_{95\%}[`r CI[8,1]`,`r CI[8,2]`]$)
+
+## The Final Estimated Effects Model
+We will want to drop `gear` and `am` from the final model, unless their
+inclusion substantially improves the standard errors associated with the levels
+of `cyl`. The final effects model is 
+
+$$
+\text{mpg}_i = \beta_0 + \beta_1I_{cyl6} + \beta_2I_{cyl8} + \beta_3x_{disp,i} + \beta_4x_{wt,i} + E_i.
+$$
+
+```{r fit final model}
+mod.fin <- lm(mpg~cyl+wt+disp, data=df)
+CI.fin <- confint(mod.fin) |> round(2)
+mod.fin |> summary()
+```
+The removal of the two independent predictors did not change the standard errors
+of the levels of `cyl` so there is no reason to keep these predictors in the 
+final mode.
+
+![Final effects model](images/Final_Effects_Model.svg){width=50%}
+
+This model can be compared to a total effect model where the outcome is
+regressed solely on the treatment. Here, you can see that the effect of
+additional cylinders is noticeably larger than in the model that includes the
+mediators. If our causal model is correct (and that is open to debate!), then
+there is a substantial effect of the number of cylinders on fuel economy above
+and beyond the effect on fuel economy through the mechanisms of weight and
+engine displacement.
+
+$$
+\text{mpg}_i = \beta_0 + \beta_1I_{cyl6} + \beta_2I_{cyl8} + E_i
+$$
 
 ```{r}
-lm(mpg~cyl+gear, data=df) |> summary()
-lm(mpg~cyl+am, data=df) |> summary()
-lm(mpg~cyl, data=df) |> summary()
+mod.tot_eff <- lm(mpg~cyl, data=df)
+mod.tot_eff |> summary()
 ```
-
-
-```{r}
-lm(mpg~cyl, data=df) |> summary()
-
-lm(mpg~cyl+disp, data=df) |> summary()
-
-lm(mpg~cyl+wt, data=df) |> summary()
-
-lm(mpg~cyl+wt+disp+gear+am, data=df) |> summary()
-```
-
 
 ## In Summary
-
-Summarise what it means to be a mediator and the reasons that we might want to
-include or exclude mediators from an effects model.
+If the goal of a model is to assess the effect of a treatment on an outcome, 
+then it is important to carefully consider what predictors should be added to the
+model and which should not. Constructing a causal diagram that reflects your 
+hypothesised set of relationships helps you to create to a model that reflects
+your conceptual understanding of the system and how variables are related to one
+another. While it is important to include all known 
+[confounders](confounders.html) in the model (if data has been collected on 
+them), the decision to include or exclude mediators is, perhaps, more nuanced.
+As demonstrated above, the inclusion of mediators will change the parameter
+estimate(s) associated with the treatment. If done unintentionally, this will
+result in a biased estimate of the treatment. However, if done with intent, it
+can painted a more detailed picture of how the treatment affects the outcome.
 
 ## References
 
