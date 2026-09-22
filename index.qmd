@@ -1,8 +1,8 @@
 ---
-title: "Logist Regression Fundamentals"
+title: "Logistic Regression Fundamentals"
 ---
 
-# Introduction
+## Introduction
 Logistic regression is an important tool for anyone who needs to answer research
 questions involving binary outcomes or to make predictions involving the
 classification of observations. It is used widely in a whole host of disciplines
@@ -25,8 +25,8 @@ concepts if they are new to you.
 ## Guide Structure
 This guide is broken down into 5 stages:
 
-1) The Foundation: The fundamental concepts of logistic regression are explained through the lens of a very simple model.
-2) A research question: Building on the foundation, a research question is answered with a more complex model.
+1) The [Foundation](logistic-regression-foundations.html): The fundamental concepts of logistic regression are explained through the lens of a very simple model.
+2) Estimating an Effect: Building on the foundation, we take a look at causal inference using data from the Framingham Heart Study.
 3) Prediction: If prediction is the goal, then the considerations and model selection process is different to that of an effect size model.
 4) Cross-validation: For the prediction model from state 3, we can use cross validation to understand how will this model will perform on data it wasn't trained on.
 

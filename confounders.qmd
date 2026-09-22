@@ -388,9 +388,12 @@ summary(lm.full) |> broom::tidy() |>
 ```
 
 ## In Summary
-
-Summarise what it means to be a confounder and the ways that an omitted
-confounder can bias the effect of the treatment.
+The scenarios above highlight why it is so important to identify and gather data
+on confounders before conducting an experiment or observational study. If left
+uncontrolled, the confounders could bias the estimated treatment effect,
+resulting in spurious conclusions about the relationship under investigation.
+Even if a confounder has a parameter coefficient that is not reliably different
+to zero, it should be included in the effects model.
 
 ## References
 

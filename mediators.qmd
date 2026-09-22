@@ -24,6 +24,10 @@ part. The diagram below depicts this graphically.
 
 ![Path Diagram of a mediation reationship.](images/mediation.svg){width=50%}
 
+In this simple model, the effect of $X_1$ on $Y$ is mediated, in part, by $X_2$.
+There is an additional effect (dashed grey line) of $X_1$ on $Y$ that is not 
+mediated by $X_2$.
+
 When constructing an effects model to investigate the effect of the treatment on
 the outcome, it may be useful to include mediators in the model if a more 
 granular analysis of the treatment effect is desired. However, if the total
