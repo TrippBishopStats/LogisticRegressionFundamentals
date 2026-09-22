@@ -9,7 +9,7 @@ classification of observations. It is used widely in a whole host of disciplines
 including medical research, ecology and the social sciences. The purpose of this
 guide is to walk you through the process of learning the main concepts behind
 logistic regression: what kinds of questions it can be applied to, how to 
-implement a logistic regression model in R, and more advanced concepts like
+implement a logistic regression model in R and more advanced concepts like
 model selection and cross-validation.
 
 ## Prerequisites
