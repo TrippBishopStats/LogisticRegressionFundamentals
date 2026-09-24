@@ -1,7 +1,8 @@
 ---
-title: " Multiple Logistic Regression"
+title: "Estimating the Effect of Smoking on Coronary Heart Disease"
 format: 
   html:
+    fig-height: 2.5
     code-fold: true
     code-summary: "Show the code"
 execute:
@@ -9,28 +10,98 @@ execute:
   messages: true
 ---
 
+## The Dataset
+
+
 ```{r initial setup}
 library(tidyverse)
-chd <- read_csv("framingham.csv")
+theme_set(theme_bw())
+chd <- read_csv("framingham.csv") |> 
+  select(male, age, currentSmoker, totChol, diaBP, BMI, glucose, TenYearCHD)
 
-glimpse(chd)
-
-skimr::skim(chd)
-
-complete.cases(chd) |> sum()
+chd <- chd[complete.cases(chd),]
 
 chd <- chd |> 
   mutate(
     sex = if_else(male == 1, "Male", "Female") |> factor(levels=c("Female", "Male")),
     smoker = if_else(currentSmoker == 1, "Yes", "No") |> as_factor(),
-    haschd = if_else(TenYearCHD == 1, "Yes", "No") |> as_factor(),
-  )
+    haschd = if_else(TenYearCHD == 1, "Yes", "No") |> as_factor()
+  ) |> 
+  select(-c(male, currentSmoker, TenYearCHD))
 
-chd <- chd[complete.cases(chd),]
+library(psych); library(gt)
+# helper functions
+univariate_summary <- function(data) {
+  describe(data, IQR=TRUE) |> 
+    select("Mean"=mean, "SD"=sd, "Median"=median, "Min"=min, "Max"=max, IQR)
+}
+
+univariate_plot <- function(data, field, xlab, bins=30) {
+  ggplot(data, aes(x={{field}})) + 
+    geom_histogram(aes(y = after_stat(density)), colour="black", bins=bins, fill="white", alpha=0.7) +
+    geom_density(linewidth=1, fill="seagreen", alpha=0.2) + 
+    labs(x=xlab)
+}
+
+```
+
+```{r skim the dataset}
+library(skimr)
+skim(chd)
 ```
 
 
 **Cite these guys:** [Framingham Heart Study - CHD Risk Prediction](https://github.com/KomlaAkpalu/Framingham-CoronaryHeartDisease-Modeling/tree/main)
+
+## Univariate Analyses
+
+```{r}
+var_summaries <- bind_rows(
+  univariate_summary(chd$age),
+  univariate_summary(chd$totChol),
+  univariate_summary(chd$diaBP),
+  univariate_summary(chd$BMI),
+  univariate_summary(chd$glucose)
+)
+
+rownames(var_summaries) <- 
+  c("Age", "Total Cholesterol", "Diastolic BP", "Body Mass Index", "Blood Glucose")
+
+var_summaries |> 
+  gt(rownames_to_stub=TRUE) |> 
+  fmt_number(decimals=1)
+```
+
+
+```{r}
+#| fig-height: 6
+#| fig-width: 10
+library(patchwork); library(latex2exp)
+(
+  univariate_plot(chd, age, "Age (yr)", bins=10) + 
+  univariate_plot(chd, totChol, "Total Cholesterol (mg/dL)") +
+  univariate_plot(chd, diaBP, "Diastolic Blood Pressure (mm Hg)", bins=25)
+)/(
+  univariate_plot(chd, BMI, TeX("Body Mass Index ($kg/m^2$)")) +
+  (univariate_plot(chd, glucose, "Blood Glucose (mg/dL)") +
+  geom_vline(xintercept=126, linewidth=1, linetype="dashed", colour="grey30") +
+  annotate("text", label="126 mg/dL cutoff for Diabetes diagnosis", x=140, 
+           y=0.025, hjust=0.05))
+) + plot_layout(axes = "collect")
+```
+
+
+
+
+## Bivariate Exploratory Analyses
+
+```{r pairs plot}
+library(GGally)
+chd |> select(age, totChol, diaBP, BMI, glucose) |> ggpairs(progress=FALSE)
+```
+
+
+
 
 
 ```{r}
@@ -41,14 +112,14 @@ boxplot(age ~ smoker, data=chd)
 
 
 ```{r}
-chisq.test(x=chd$male, y=chd$currentSmoker)
-table(chd$sex, chd$smoker) |> prop.table(margin=1)
+# chisq.test(x=chd$male, y=chd$currentSmoker)
+# table(chd$sex, chd$smoker) |> prop.table(margin=1)
 ```
 Fitting an intial model with potentially important variables. It includes
 variables that might be confounders, mediators and independent predictors.
 
 ```{r}
-lr.modA <- glm(haschd ~ smoker + sex + age + totChol + glucose + BMI + prevalentHyp, 
+lr.modA <- glm(haschd ~ smoker + sex + age + totChol + glucose + BMI, 
     data=chd, family=binomial)
 summary(lr.modA)
 ```
@@ -58,7 +129,7 @@ they smoke or not. However, smoking does influence `BMI` and thus `BMI` may
 mediate smoking's influence on CHD risk.
 
 ```{r}
-lr.modB <- glm(haschd ~ smoker + sex + age + totChol + glucose + prevalentHyp, 
+lr.modB <- glm(haschd ~ smoker + sex + age + totChol + glucose, 
     data=chd, family=binomial)
 summary(lr.modB)
 ```
