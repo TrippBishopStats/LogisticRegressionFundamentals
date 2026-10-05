@@ -12,7 +12,6 @@ execute:
 
 ## The Dataset
 
-
 ```{r initial setup}
 library(tidyverse)
 theme_set(theme_bw())
@@ -28,21 +27,6 @@ chd <- chd |>
     haschd = if_else(TenYearCHD == 1, "Yes", "No") |> as_factor()
   ) |> 
   select(-c(male, currentSmoker, TenYearCHD))
-
-library(psych); library(gt)
-# helper functions
-univariate_summary <- function(data) {
-  describe(data, IQR=TRUE) |> 
-    select("Mean"=mean, "SD"=sd, "Median"=median, "Min"=min, "Max"=max, IQR)
-}
-
-univariate_plot <- function(data, field, xlab, bins=30) {
-  ggplot(data, aes(x={{field}})) + 
-    geom_histogram(aes(y = after_stat(density)), colour="black", bins=bins, fill="white", alpha=0.7) +
-    geom_density(linewidth=1, fill="seagreen", alpha=0.2) + 
-    labs(x=xlab)
-}
-
 ```
 
 ```{r skim the dataset}
@@ -53,9 +37,41 @@ skim(chd)
 
 **Cite these guys:** [Framingham Heart Study - CHD Risk Prediction](https://github.com/KomlaAkpalu/Framingham-CoronaryHeartDisease-Modeling/tree/main)
 
-## Univariate Analyses
+## The Causal Model
 
-```{r}
+![Effect Model - Smoking's effect on Ten Year Coronary Heart Disease Risk](images/Effect-Size-Model-Framingham-Heart-Study.svg){width=80%}
+
+
+
+## Univariate Analyses
+Analyses will be conducted on each variable. In the case of continuous variables
+descriptive statistics will tabulated and distribution plots created. For
+categorical variables, a simple percentage of each level will be determined. 
+Because we are only considering complete cases, we don't need to consider
+missingness or a strategy for imputing missing data.
+
+### Continuous Variables
+The five continuous variables are summarised in the table below. Study subjects
+range in age from 32 to 70 years with a mean age of 49.6 years and standard
+deviation of 8.6 year. The distribution is relatively symmetric. The
+distribution of diastolic blood pressure shows modest right skew. The
+distribution of body mass index has more pronounced right skew with the maximum
+value in the sample being more than twice the mean value. Total cholesterol and
+blood glucose both exhibit substantial positive skewness, with each having
+outliers on the high end of their respective scales. These observations are
+valid so it would be wise to do a sensitivity analysis with them removed to
+determine how influential these observations are on the parameter estimates.
+
+```{r univariate descriptive statistics}
+library(psych); library(gt)
+# a helper function to return descriptive stats for a given variable
+univariate_summary <- function(data) {
+  describe(data, IQR=TRUE) |> 
+    select("Mean"=mean, "SD"=sd, "Median"=median, "Min"=min, "Max"=max, IQR)
+}
+
+# smash all of the summaries into a dataframe that can be used to generate a
+# table.
 var_summaries <- bind_rows(
   univariate_summary(chd$age),
   univariate_summary(chd$totChol),
@@ -67,16 +83,29 @@ var_summaries <- bind_rows(
 rownames(var_summaries) <- 
   c("Age", "Total Cholesterol", "Diastolic BP", "Body Mass Index", "Blood Glucose")
 
+# render the table of descriptive statistics
 var_summaries |> 
   gt(rownames_to_stub=TRUE) |> 
   fmt_number(decimals=1)
 ```
 
 
-```{r}
+```{r univariate distribution plots}
 #| fig-height: 6
 #| fig-width: 10
-library(patchwork); library(latex2exp)
+#| fig-cap: "Histogram and density plots of the five continuous variables."
+#| fig-align: "center"
+library(patchwork); library(latex2exp) # use the TeX function for latex label
+
+# helper function to to create a histogram/density plot for a given variable
+univariate_plot <- function(data, field, xlab, bins=30) {
+  ggplot(data, aes(x={{field}})) + 
+    geom_histogram(aes(y = after_stat(density)), colour="black", bins=bins, fill="white", alpha=0.7) +
+    geom_density(linewidth=1, fill="seagreen", alpha=0.2) + 
+    labs(x=xlab, y="Density")
+}
+
+# use patchwork to create a nice aggregate plot with 2 rows
 (
   univariate_plot(chd, age, "Age (yr)", bins=10) + 
   univariate_plot(chd, totChol, "Total Cholesterol (mg/dL)") +
@@ -87,34 +116,417 @@ library(patchwork); library(latex2exp)
   geom_vline(xintercept=126, linewidth=1, linetype="dashed", colour="grey30") +
   annotate("text", label="126 mg/dL cutoff for Diabetes diagnosis", x=140, 
            y=0.025, hjust=0.05))
-) + plot_layout(axes = "collect")
+)
 ```
 
+### Categorical Variables
+There are three categorical variables in the dataset: `sex`, `smoker` and 
+`haschd`. All three are dichotomous (have two possible outcomes) variables. The
+sample has a nearly even split between smokers and non-smokers (50.9% v 49.1%)
+and males and females (44.4% v 56.6%). A majority (84.7%) of the sample subjects
+did not have coronary heart disease at their ten year point in the study.
 
+```{r categorical plots}
+#| fig-width: 10
+#| fig-height: 3.5
+#| fig-align: "center"
+pie_data <- function(data, field) {
+  data.frame(
+    variable = levels(data[[field]]),
+    counts = table(data[[field]]) |> as.matrix()
+  ) |> mutate(pct = paste((counts/nrow(chd)*100) |> round(1), "%", sep=""))
+}
 
+plot_pie <- function(data) {
+  data |> 
+  ggplot(aes(x = "", y = counts, fill = variable)) +
+    geom_col(color = "black") +
+    geom_text(aes(label = pct),
+              position = position_stack(vjust = 0.5)) +
+    coord_polar(theta = "y") +
+    scale_fill_brewer() +
+    theme_void() +
+    theme(legend.position="bottom")
+}
+
+p1 <- (pie_data(chd, "sex") |> plot_pie()) + labs(fill=as.character("Sex")) + 
+  ggtitle("Biological Sex")
+
+p2 <- (pie_data(chd, "smoker") |> plot_pie()) + labs(fill=as.character("Smoker")) + 
+  ggtitle("Smoking Status")
+
+p3 <- (pie_data(chd, "haschd") |> plot_pie()) + labs(fill="Has CHD") + 
+  ggtitle("CHD Status")
+
+p1 + plot_spacer() + p2 + plot_spacer() + p3 + plot_layout(ncol = 5)
+```
 
 ## Bivariate Exploratory Analyses
+Bivariate comparisons should be conducted to assess the correlations between continuous variables, group distributions for continuous/categorical pairs of variables and the independence of categorical variable pairs. All pairwise combinations will be examined.
+### Continuous Variable Correlation Plots
+First, scatter plots and correlations between variable pairs can be computed
+using the `ggpairs()` function from the `GGally` package. We know from the
+univariate analysis that three of the variables (`diaBP`, `totChol` and
+`glucose`) have many outliers and the distributions are reasonably skewed so the
+assumptions of normality of the data and no/few outliers of Pearson's
+correlation are violated. Kendall's $\tau$ is used to compute correlations as it
+does not make these assumptions. The relationships between variables in the
+plots appear to be monotone and we know that all of these variables are ratio so
+the assumptions of the method are satisfied.
 
 ```{r pairs plot}
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: "A comparison of age, total cholesterol, diastolic blood pressure, body mass index and blood glucose in the sample study ($n=3828$)."
+#| fig-align: "center"
 library(GGally)
-chd |> select(age, totChol, diaBP, BMI, glucose) |> ggpairs(progress=FALSE)
+chd |> select(age, totChol, diaBP, BMI, glucose) |> 
+  ggpairs(progress=FALSE, upper = 
+            list(continuous = wrap("cor", method = "kendall")))
+```
+The plots and correlations indicate that the variables are at most weakly 
+correlated ($0.1 \leq \tau < 0.4$) with many variable pairs being uncorrelated 
+($\tau < 0.1$). These variables appear to be independent of one another and some
+of them may be useful independent predictors of coronary heart disease risk.
+
+### Categorical/Continuous Variable Plots 
+Each categorical variable is plotted with each continuous variable. The 
+distribution of each continuous variable is compared across the levels of the
+categorical variable with box plots.
+
+#### Biological Sex
+
+```{r categorical v continuous bivariate plots sex}
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: "A comparison of age, total cholesterol, diastolic blood pressure, body mass index and blood glucose between males and females in the sample study ($n=3828$)."
+#| fig-align: "center"
+plot_box <- function(data, field1, field2, xlab="", ylab="") {
+  ggplot(data=data, aes(x={{field1}}, y={{field2}})) + 
+    geom_boxplot() + 
+    coord_flip() + 
+    labs(x=xlab, y=ylab)
+}
+
+plot_box(chd, sex, age, "Sex", "Age (yr)") + plot_box(chd, sex, totChol, "Sex", "Total cholesterol (ml/dL)") +
+plot_box(chd, sex, diaBP, "Sex", "Diastolic BP (mm Hg)") + plot_box(chd, sex, BMI, "Sex", TeX("Body mass index ($kg/m^2$)")) +
+plot_box(chd, sex, glucose, "Sex", "Blood Glucose (mg/dL)") + plot_layout(axes="collect")
+```
+There do not appear to be any substantive differences between the continuous
+variables and biological sex except age and possibly body mass index. To confirm
+what the plots show us, we perform t-tests and measure effect size with Cohen's
+d. Because the sample size is so large here ($n=3828$) the test will have a lot
+of power to detect even trivial differences in the two group means. This is why
+a measure of effect size is helpful. Given that there are many outliers in many
+of these variables (with the exception of age which is capped at 70 years), we
+need to conduct a sensitivity analysis to see if the presence of outliers is
+biasing the estimated difference between the group means. We will use 2 methods
+to test sensitivity here: Excluding outliers and rank-based effect size
+estimation. If the results of the standard t-test agree with these other methods,
+then we can reliably use the parametric test and effect size. If not, then the
+nonparametric rank-based test and effect size will be used instead.
+
+##### Age v Sex
+Age does not have any outliers and the variances look roughly equal based on the
+plot. Levene's test can be used to assess homogeneity of the variances of men and
+women.
+
+```{r}
+library(rstatix)
+levene_test(chd, age ~ sex) |> round(4)
+```
+With $p=0.5598$, the null hypothesis of equal variances cannot be rejected. 
+
+The data are right skewed, so the assumption of normality of the outcome is
+violated. However, the two-sample test is reasonably robust to departures from
+normality. Comparison with the results of a nonparametric method will allow us
+to assess if the data are "normal enough".
+
+```{r age v sex sensitivity test}
+t_result <- t.test(age ~ sex, data = chd)
+wilcox_result <- wilcox.test(age ~ sex, data = chd, exact = FALSE)
+```
+
+| Test | Statistic | p value |
+|----------|----------|-----------|
+| T-test | `r t_result$statistic` | `r t_result$p.value` |
+| Mann-Whitney | `r wilcox_result$statistic ` | `r t_result$p.value` |
+
+The conclusion of both tests is the same: There is not enough evidence to reject
+the notion that the mean age of men and women in the study population is the 
+same.
+
+##### Total Cholesterol v Biological Sex
+Total cholesterol does have a substantial number of outliers and the box plot
+by biological sex suggests that the variances are not equal. In order to
+determine if the outliers are biasing the estimate of the difference in means of
+the standard t test, both a t-test excluding outliers will be conducted as well
+as a non-parametric test.
+
+```{r}
+library(effsize)
+# helper function that applies a standard t test, a t test excluding outliers,
+# and the Mann-Whitney non-parametric test and Cohen'd and Cliff's Delta for
+# effect sizes to a continuous outcome and dichotomous predictor. The results of
+# all three scenarioes are then tabulated and returned.
+sensitivity_table <- function(outcome, exposure) {
+  test_formula <- as.formula(paste(outcome,"~",exposure))
+  basic.t <- t.test(test_formula, chd)
+  basic.d <- cohens_d(chd, test_formula, ci=TRUE, ci.method="analytic")
+  
+  # use truncated data (no outliers) to create dataset for t/cohen's d
+  value <- chd[outcome] |> unlist() |> as.numeric()
+  quants <- quantile(value, probs=c(0.25, 0.75)) # values in the IQR
+  IQR.mag <- IQR(value)
+  
+  chd_no_outliers <- chd |> 
+  mutate(
+    is_outlier = if_else(between(get(outcome), quants[1] - 1.5*IQR.mag, 
+                                 quants[2] + 1.5*IQR.mag), FALSE, TRUE)
+  ) |> filter(!is_outlier)
+  
+  # now that data have been truncated to remove outliers, perform t test and
+  # assess effect size
+  trunc.t <- t.test(test_formula, data=chd_no_outliers)
+  trunc.d <- cohens_d(chd_no_outliers, test_formula, ci=TRUE, 
+                      ci.method="analytic")
+  
+  # now assess effect size with Mann-Whitney and Cliff's Delta
+  U <- wilcox.test(test_formula, data = chd, exact=FALSE)
+  CD <- cliff.delta(test_formula, data = chd)
+  
+  # smash all of the results together into a single data frame to tabulate
+  bind_rows(
+    tibble(Method = "Standard t-test / Cohen’s d", 
+           `Effect size` = basic.d$effsize, 
+           p.value = basic.t$p.value, 
+           `95% CI` = paste("[",round(basic.d$conf.low,3), ",", 
+                            round(basic.d$conf.high,3), "]", sep=""),
+           Magnitude = basic.d$magnitude),
+    tibble(Method = "Outliers excluded", 
+           `Effect size` = trunc.d$effsize, 
+           p.value = trunc.t$p.value, 
+           `95% CI` = paste("[",round(trunc.d$conf.low,3), ",", 
+                            round(trunc.d$conf.high,3), "]", sep=""),
+           Magnitude = trunc.d$magnitude),
+    tibble(Method = "Mann-Whitney / Cliff’s delta", 
+           `Effect size` = CD$estimate, p.value = U$p.value, 
+           `95% CI` = paste("[",round(CD$conf.int["lower"],3), ",", 
+                            round(CD$conf.int["upper"],3), "]", sep=""),
+           Magnitude = as.character(CD$magnitude))
+  ) |> 
+    mutate(
+      p.value = scales::pvalue(p.value, accuracy=0.0001)
+    ) |> 
+    gt() |> 
+    fmt_number(decimals=3)
+}
+
+sensitivity_table("totChol", "sex")
+```
+
+The results of all three tests agree on direction and magnitude. While the test
+results are statistically significant, the effect size is "negligible". This
+suggests that we can treat total cholesterol as being independent of biological
+sex.
+
+##### Diastolic Blood Pressure v Biological Sex
+Like most of the other continuous predictors, there are a considerable number of
+outliers and like total cholesterol, there is a long right tail in the 
+distribution of observations.
+
+```{r}
+sensitivity_table("diaBP", "sex")
+```
+
+As before, the results of all three tests agree on direction and magnitude.
+While the test results are statistically significant, the effect size is
+"negligible". This suggests that we can treat diastolic blood pressure as being
+independent of biological sex.
+
+#### Body Mass Index v Biological Sex
+Body mass index is typically lower in males than females, so a non-negligible
+effect size is expected. Like the other continuous predictors there is a
+positive skew. Given the number of outliers and the skew, it is again worth
+performing a sensitivity analysis to determine if a nonparametric method is
+required for an unbiased estimate.
+
+```{r}
+sensitivity_table("BMI", "sex")
+```
+The direction of the effect is the same across the three methods used. The
+Mann-Whitney and excluded outliers methods agree on the magnitude of the effect.
+The given that the assumptions of the standard t-test have been violated, the 
+nonparametric method is preferred in this instance. The conclusion is that there
+is a difference in mean BMI between males and females in the study population.
+Biological sex is likely a confounder for the BMI/CHD relationship. This will 
+not directly impact the proposed causal model, but it is useful to note.
+
+#### Blood Glucose v Biological Sex
+The distribution of blood glucose is the most skewed of the five continuous
+variables considered in the proposed causal model. The variance may be constant
+across across males and females, but the large number of outliers will again
+require an sensitivity analysis.
+
+```{r}
+sensitivity_table("glucose", "sex")
+```
+
+All three methods indicate that there is no evidence that the difference in mean  
+blood glucose levels between males and females is reliably different to zero.
+
+#### Smoking Status
+
+```{r categorical v continuous bivariate plots smoking}
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: "A comparison of age, total cholesterol, diastolic blood pressure, body mass index and blood glucose between smokers and nonsmokers in the sample study ($n=3828$)."
+#| fig-align: "center"
+
+plot_box(chd, smoker, age, "Smoker", "Age (yr)") + plot_box(chd, smoker, totChol, "Smoker", "Total cholesterol (ml/dL)") +
+plot_box(chd, smoker, diaBP, "Smoker", "Diastolic BP (mm Hg)") + plot_box(chd, smoker, BMI, "Smoker", TeX("Body mass index ($kg/m^2$)")) +
+plot_box(chd, smoker, glucose, "Smoker", "Blood Glucose (mg/dL)") + plot_layout(axes="collect")
+```
+These boxplots indicate that there are a substantial number of outliers for smokers as well as nonsmokers. The univariate analysese show that the distributions are skewed/asymmetric so the assumptions of the t-test are violated.
+
+##### Age v Smoking
+
+```{r}
+library(rstatix)
+levene_test(chd, age ~ smoker) |> round(4)
+```
+
+##### Total Cholesterol v Smoking
+
+```{r total cholesterol v smoking sensitivity}
+sensitivity_table("totChol", "smoker")
+```
+
+##### Diastolic Blood Pressure v Smoking Status
+
+```{r diastolic BP v smoking sensitivity}
+sensitivity_table("diaBP", "smoker")
+```
+
+##### Body Mass Index v Smoking Status
+
+```{r BMI v smoking sensitivity}
+sensitivity_table("BMI", "smoker")
 ```
 
 
+##### Blood Glucose v Smoking Status
 
+```{r glucose v smoking sensitivity}
+sensitivity_table("glucose", "smoker")
+```
 
 
 ```{r}
-boxplot(age ~ smoker, data=chd)
+bind_rows(
+  cohens_d(chd, BMI ~ smoker),
+  cohens_d(chd, age ~ smoker),
+  cohens_d(chd, totChol ~ smoker),
+  cohens_d(chd, diaBP ~ smoker),
+  cohens_d(chd, glucose ~ smoker)
+) |> 
+  select("Variable"=.y., "Effect size"=effsize, "Magenitude"=magnitude) |> 
+  gt() |> 
+  fmt_number(decimals=2)
 ```
 
 
+
+
+```{r categorical v continuous bivariate plots CHD}
+#| fig-height: 6
+#| fig-width: 10
+#| fig-cap: "A comparison of age, total cholesterol, diastolic blood pressure, body mass index and blood glucose between those with and without CHD in the sample study ($n=3828$)."
+#| fig-align: "center"
+
+plot_box(chd, haschd, age, "Has CHD", "Age (yr)") + plot_box(chd, haschd, totChol, "Has CHD", "Total cholesterol (ml/dL)") +
+plot_box(chd, haschd, diaBP, "Has CHD", "Diastolic BP (mm Hg)") + plot_box(chd, haschd, BMI, "Has CHD", TeX("Body mass index ($kg/m^2$)")) +
+plot_box(chd, haschd, glucose, "Has CHD", "Blood Glucose (mg/dL)") + plot_layout(axes="collect")
+```
+There are small effects of   
 
 
 ```{r}
-# chisq.test(x=chd$male, y=chd$currentSmoker)
-# table(chd$sex, chd$smoker) |> prop.table(margin=1)
+bind_rows(
+  cohens_d(chd, BMI ~ haschd, ci=TRUE),
+  cohens_d(chd, age ~ haschd, ci=TRUE),
+  cohens_d(chd, totChol ~ haschd, ci=TRUE),
+  cohens_d(chd, diaBP ~ haschd, ci=TRUE),
+  cohens_d(chd, glucose ~ haschd, ci=TRUE)
+) |> 
+  mutate(
+    CI = paste("[", conf.low, ",", conf.high , "]", sep="")
+  ) |> 
+  select("Variable"=.y., "Effect size"=effsize, "95% CI"=CI, "Magenitude"=magnitude) |> 
+  gt() |> 
+  fmt_number(decimals=2)
 ```
+
+
+### Categorical/Categorical Bivariate Analysis 
+
+
+```{r}
+#| fig-height: 3.5
+#| fig-width: 10
+#| fig-cap: "A pairwise comparisons of biological sex, smoking status and CHD status. Smoking status"
+#| fig-align: "center"
+
+# A helper function to generate the category v category bar charts
+plot_cat_v_cat <- function(data, field1, field2) {
+  data |> group_by({{field1}}, {{field2}}) |> 
+    summarise(
+      .groups = "drop_last",
+      n = n()
+    ) |> 
+    mutate(prop = (n / sum(n)) |> round(1)) |> 
+  ggplot(aes(x = {{field1}}, y=prop, fill = {{field2}})) +
+    geom_col(position = "dodge", alpha=0.7, colour="white") +
+    scale_fill_manual(aesthetics = c("fill"), values=c("Yes"="firebrick", 
+                                                       "No"="steelblue")) +
+    scale_y_continuous(labels = scales::percent) +
+    theme_bw() +
+    theme(axis.title.y=element_blank())
+}
+
+p1 <- plot_cat_v_cat(chd, sex, smoker) + labs(
+    x = "Biological sex",
+    fill = "Smoker"
+  )
+
+p2 <- plot_cat_v_cat(chd, sex, haschd) + labs(
+    x = "Biological sex",
+    fill = "Has CHD"
+  )
+
+p3 <- plot_cat_v_cat(chd, smoker, haschd) + labs(
+    x = "Smoking status",
+    fill = "Has CHD"
+  )
+
+p1 + p2 + p3
+```
+
+```{r chisq independence tests}
+chisq.smk.sex <- chisq.test(x=chd$smoker, y=chd$sex)
+chisq.chd.sex <- chisq.test(x=chd$haschd, y=chd$sex)
+chisq.chd.smk <- chisq.test(x=chd$haschd, y=chd$smoker)
+```
+| Independence Test | $\chi^2_1$ | $p$ value |
+|-------------------|------------|-----------|
+|Biological sex/Smoking| `r chisq.smk.sex$statistic |> round(3)`| `r scales::pvalue(chisq.smk.sex$p.value, accuracy=0.0001)` |
+|Biological sex/CHD| `r chisq.chd.sex$statistic |> round(3)`| `r scales::pvalue(chisq.chd.sex$p.value, accuracy=0.0001)` |
+|Smoking/CHD| `r chisq.chd.smk$statistic |> round(3)`| `r scales::pvalue(chisq.chd.smk$p.value, accuracy=0.0001)` |
+
+
+
+
+
 Fitting an intial model with potentially important variables. It includes
 variables that might be confounders, mediators and independent predictors.
 
