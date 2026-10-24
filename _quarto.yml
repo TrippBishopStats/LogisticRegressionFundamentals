@@ -11,6 +11,8 @@ website:
         text: Home
       - href: logistic-regression-foundations.qmd
         text: Foundations
+      - href: multiple-logistic-regression.qmd
+        text: Effects Model
 
 format:
   html:
