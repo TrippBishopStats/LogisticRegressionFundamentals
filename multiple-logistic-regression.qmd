@@ -11,6 +11,31 @@ execute:
 ---
 
 ## The Dataset
+The Framingham Heart Study was started in 1948 by the National Heart Institute 
+with the goal of identifying common factors that contribute to cardiovascular 
+disease. The data used in this guide comes 
+[Framingham Heart Study - CHD Risk Prediction](https://github.com/KomlaAkpalu/Framingham-CoronaryHeartDisease-Modeling/tree/main) 
+and was cleaned and prepared by them. The data contained in this dataset are
+cross-sectional, meaning that there is only one measurement per subject. Since
+this guide is focused on constructing an effects model, only complete cases
+($n=3828$) are considered so that there is no missing data. A proper analysis
+would need to consider missing data rigorously.
+
+The dataset contains the following variables:
+
+**Categorical variables**:
+
+- `sex` - The biological sex of the subject. A factor with two levels: `Fem` and `Mal`.
+- `smoker` - Is subject a current smoker? A factor with two levels: `No` and `Yes`.
+- `haschd` - Does the subject have coronary heart disease? A factor with two levels: `No` and `Yes`.
+
+**Continuous variables**:
+
+- `age` - The age, in years, of the subject.
+- `totChol` - The total cholesterol ($mg/dL$) of the subject.
+- `diaBP` - Diastolic blood pressure ($mmHg$) of the subject.
+- `BMI` - The body mass index ($kg/m^2$) of the subject.
+- `glucose` - The casual serum glucose (mg/dL) of the subject.
 
 ```{r initial setup}
 library(tidyverse)
@@ -29,38 +54,47 @@ chd <- chd |>
   select(-c(male, currentSmoker, TenYearCHD))
 ```
 
-```{r skim the dataset}
-library(skimr)
-skim(chd)
-```
-
-
-**Cite these guys:** [Framingham Heart Study - CHD Risk Prediction](https://github.com/KomlaAkpalu/Framingham-CoronaryHeartDisease-Modeling/tree/main)
-
 ## The Causal Model
+Imagine that you are a researcher who studies smoking and its impact on health.
+You are interested in quantifying the effect of smoking on coronary heart
+disease. The Framingham Heart Study data provides you with an observational
+study (subjects were not randomly assigned to either smoke or not, the ethics of
+that would be horrific!) but you are interested in making causal inference. A
+causal model can help you construct a model that will allow you to make causal
+statements, but you need to consider potential [confounders](confounders.html)
+and [mediators](mediators.html). You are interested in the *direct effect* of
+smoking on coronary heart disease, so you need to include mediators in your
+model in order to determine the direct effect. The causal model shown below is
+one possible model and we will explore this model in this guide.
 
-![Effect Model - Smoking's effect on Ten Year Coronary Heart Disease Risk](images/Effect-Size-Model-Framingham-Heart-Study.svg){width=80%}
+This model posits that age and sex are confounders. There are three mediators of
+the effect of smoking on coronary heart disease: Body mass index, diastolic
+blood pressure and total cholesterol. Additionally, there is an independent
+predictor, blood glucose, that may be useful in increasing the precision of the
+direct effect estimate.
+
+![Effect Model - Smoking's effect on Ten Year Coronary Heart Disease Risk. Mediation paths are indicated by grey arrows.](images/Effect-Size-Model-Framingham-Heart-Study.svg){width=80%}
 
 
 
 ## Univariate Analyses
-Analyses will be conducted on each variable. In the case of continuous variables
+Analyses will be conducted on each variable. In the case of continuous variables,
 descriptive statistics will tabulated and distribution plots created. For
-categorical variables, a simple percentage of each level will be determined. 
+categorical variables, a simple percentage of each level will be computed. 
 Because we are only considering complete cases, we don't need to consider
 missingness or a strategy for imputing missing data.
 
 ### Continuous Variables
 The five continuous variables are summarised in the table below. Study subjects
 range in age from 32 to 70 years with a mean age of 49.6 years and standard
-deviation of 8.6 year. The distribution is relatively symmetric. The
-distribution of diastolic blood pressure shows modest right skew. The
-distribution of body mass index has more pronounced right skew with the maximum
-value in the sample being more than twice the mean value. Total cholesterol and
-blood glucose both exhibit substantial positive skewness, with each having
-outliers on the high end of their respective scales. These observations are
-valid so it would be wise to do a sensitivity analysis with them removed to
-determine how influential these observations are on the parameter estimates.
+deviation of 8.6 years. The distribution is relatively symmetric. The remaining
+variable distributions all exhibit positive skew with BMI and diastolic BP
+exhibiting modest right tails and total cholesterol and blood glucose exhibiting
+more extreme outliers in their right tails. The outliers in these distributions 
+are valid so sensitivity analyses will be performed to assess how influential
+the outliers are on hypothesis tests and estimates of effect size. Table 1 
+provides detailed descriptive statistics for each variable. See figure 1 for
+variable distributions.
 
 ```{r univariate descriptive statistics}
 library(psych); library(gt)
@@ -89,11 +123,13 @@ var_summaries |>
   fmt_number(decimals=1)
 ```
 
+Table 1: Descriptive statistics for continuous covariates: Age (yr), total 
+cholesterol (mg/dL), diastolic BP (mmHg), BMI ($kg/m^2$) and blood glucose (mg/dL).
 
 ```{r univariate distribution plots}
 #| fig-height: 6
 #| fig-width: 10
-#| fig-cap: "Histogram and density plots of the five continuous variables."
+#| fig-cap: "Figure 1: Histogram and density plots of the five continuous variables."
 #| fig-align: "center"
 library(patchwork); library(latex2exp) # use the TeX function for latex label
 
@@ -142,7 +178,7 @@ plot_pie <- function(data) {
   ggplot(aes(x = "", y = counts, fill = variable)) +
     geom_col(color = "black") +
     geom_text(aes(label = pct),
-              position = position_stack(vjust = 0.5)) +
+              position = position_stack(vjust = 0.6)) +
     coord_polar(theta = "y") +
     scale_fill_brewer() +
     theme_void() +
@@ -162,7 +198,11 @@ p1 + plot_spacer() + p2 + plot_spacer() + p3 + plot_layout(ncol = 5)
 ```
 
 ## Bivariate Exploratory Analyses
-Bivariate comparisons should be conducted to assess the correlations between continuous variables, group distributions for continuous/categorical pairs of variables and the independence of categorical variable pairs. All pairwise combinations will be examined.
+Bivariate comparisons should be conducted to assess the correlations between
+continuous variables, group distributions for continuous/categorical pairs of
+variables and the independence of categorical variable pairs. All pairwise
+combinations will be examined.
+
 ### Continuous Variable Correlation Plots
 First, scatter plots and correlations between variable pairs can be computed
 using the `ggpairs()` function from the `GGally` package. We know from the
@@ -192,7 +232,13 @@ of them may be useful independent predictors of coronary heart disease risk.
 ### Categorical/Continuous Variable Plots 
 Each categorical variable is plotted with each continuous variable. The 
 distribution of each continuous variable is compared across the levels of the
-categorical variable with box plots.
+categorical variable with box plots. Group mean comparisons will be made using
+t-tests and effect sizes estimated with Cohen's d (using rstatix package 
+`cohens_d()` function). The effect size magnitude is assessed using the standard
+thresholds provided by Cohen: $|d| < 0.2$ "negligible", $|d| < 0.5$ "small", 
+$|d| < 0.8$ "medium", otherwise "large". Due to the presence of outliers,
+sensitivity analyses will be performed using Winsorised data and nonparametric
+mean comparison with the Mann-Whitney test.
 
 #### Biological Sex
 
@@ -215,16 +261,16 @@ plot_box(chd, sex, glucose, "Sex", "Blood Glucose (mg/dL)") + plot_layout(axes="
 There do not appear to be any substantive differences between the continuous
 variables and biological sex except age and possibly body mass index. To confirm
 what the plots show us, we perform t-tests and measure effect size with Cohen's
-d. Because the sample size is so large here ($n=3828$) the test will have a lot
-of power to detect even trivial differences in the two group means. This is why
-a measure of effect size is helpful. Given that there are many outliers in many
-of these variables (with the exception of age which is capped at 70 years), we
-need to conduct a sensitivity analysis to see if the presence of outliers is
-biasing the estimated difference between the group means. We will use 2 methods
-to test sensitivity here: Excluding outliers and rank-based effect size
-estimation. If the results of the standard t-test agree with these other methods,
-then we can reliably use the parametric test and effect size. If not, then the
-nonparametric rank-based test and effect size will be used instead.
+d. Because the sample size is so large here ($n=3828$) the test will enough
+power to detect even trivial differences in the two group means. This is why a
+measure of effect size is helpful. Given that there are many outliers in many of
+these variables (with the exception of age which is capped at 70 years), we need
+to conduct a sensitivity analysis to see if the presence of outliers is biasing
+the estimated difference between the group means. We will use 2 methods to test
+sensitivity here: Excluding outliers and rank-based effect size estimation. If
+the results of the standard t-test agree with these other methods, then we can
+reliably use the parametric test and effect size. If not, then the nonparametric
+rank-based test and effect size will be used instead.
 
 ##### Age v Sex
 Age does not have any outliers and the variances look roughly equal based on the
@@ -233,7 +279,8 @@ women.
 
 ```{r}
 library(rstatix)
-levene_test(chd, age ~ sex) |> round(4)
+levene_test(chd, age ~ sex) |> round(4) |> select(statistic, p) |> 
+  gt()
 ```
 With $p=0.5598$, the null hypothesis of equal variances cannot be rejected. 
 
@@ -245,12 +292,13 @@ to assess if the data are "normal enough".
 ```{r age v sex sensitivity test}
 t_result <- t.test(age ~ sex, data = chd)
 wilcox_result <- wilcox.test(age ~ sex, data = chd, exact = FALSE)
+W <- wilcox_result$statistic
 ```
 
 | Test | Statistic | p value |
 |----------|----------|-----------|
 | T-test | `r t_result$statistic` | `r t_result$p.value` |
-| Mann-Whitney | `r wilcox_result$statistic ` | `r t_result$p.value` |
+| Mann-Whitney | $`r W`$ | `r wilcox_result$p.value` |
 
 The conclusion of both tests is the same: There is not enough evidence to reject
 the notion that the mean age of men and women in the study population is the 
@@ -263,7 +311,7 @@ determine if the outliers are biasing the estimate of the difference in means of
 the standard t test, both a t-test excluding outliers will be conducted as well
 as a non-parametric test.
 
-```{r}
+```{r totChol v sex}
 library(effsize)
 # helper function that applies a standard t test, a t test excluding outliers,
 # and the Mann-Whitney non-parametric test and Cohen'd and Cliff's Delta for
@@ -326,16 +374,16 @@ sensitivity_table("totChol", "sex")
 ```
 
 The results of all three tests agree on direction and magnitude. While the test
-results are statistically significant, the effect size is "negligible". This
-suggests that we can treat total cholesterol as being independent of biological
-sex.
+results are statistically significant, the effect size is negligible 
+($|d| < 0.2$). This suggests that we can treat total cholesterol as being 
+independent of biological sex.
 
 ##### Diastolic Blood Pressure v Biological Sex
 Like most of the other continuous predictors, there are a considerable number of
 outliers and like total cholesterol, there is a long right tail in the 
 distribution of observations.
 
-```{r}
+```{r diaBP v sex}
 sensitivity_table("diaBP", "sex")
 ```
 
@@ -344,14 +392,14 @@ While the test results are statistically significant, the effect size is
 "negligible". This suggests that we can treat diastolic blood pressure as being
 independent of biological sex.
 
-#### Body Mass Index v Biological Sex
+##### Body Mass Index v Biological Sex
 Body mass index is typically lower in males than females, so a non-negligible
 effect size is expected. Like the other continuous predictors there is a
 positive skew. Given the number of outliers and the skew, it is again worth
 performing a sensitivity analysis to determine if a nonparametric method is
 required for an unbiased estimate.
 
-```{r}
+```{r bmi v sex}
 sensitivity_table("BMI", "sex")
 ```
 The direction of the effect is the same across the three methods used. The
@@ -362,13 +410,13 @@ is a difference in mean BMI between males and females in the study population.
 Biological sex is likely a confounder for the BMI/CHD relationship. This will 
 not directly impact the proposed causal model, but it is useful to note.
 
-#### Blood Glucose v Biological Sex
+##### Blood Glucose v Biological Sex
 The distribution of blood glucose is the most skewed of the five continuous
 variables considered in the proposed causal model. The variance may be constant
 across across males and females, but the large number of outliers will again
 require an sensitivity analysis.
 
-```{r}
+```{r glucose v sex}
 sensitivity_table("glucose", "sex")
 ```
 
@@ -387,7 +435,10 @@ plot_box(chd, smoker, age, "Smoker", "Age (yr)") + plot_box(chd, smoker, totChol
 plot_box(chd, smoker, diaBP, "Smoker", "Diastolic BP (mm Hg)") + plot_box(chd, smoker, BMI, "Smoker", TeX("Body mass index ($kg/m^2$)")) +
 plot_box(chd, smoker, glucose, "Smoker", "Blood Glucose (mg/dL)") + plot_layout(axes="collect")
 ```
-These boxplots indicate that there are a substantial number of outliers for smokers as well as nonsmokers. The univariate analysese show that the distributions are skewed/asymmetric so the assumptions of the t-test are violated.
+These boxplots indicate that there are a substantial number of outliers for
+smokers as well as nonsmokers. The univariate analyses show that the
+distributions are skewed/asymmetric so the assumptions of the t-test are
+violated.
 
 ##### Age v Smoking
 

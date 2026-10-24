@@ -115,14 +115,109 @@ $$
 Equation 2 is often referred to as the omitted variable bias equation.
 
 Depending upon the relationship between the confounder and the treatment and the
-confounder and outcome, the bias will either produce an over or under estimate 
-of the treatment effect. The table [@bueno_de_mesquita_thinking_2021] below summarises the possible directions of
-bias based on these relationships.
+confounder and outcome, the bias will either produce an over or under estimate
+of the treatment effect. The table [@bueno_de_mesquita_thinking_2021] below
+summarises the possible directions of bias based on these relationships.
 
 | | Omitted Variable Positively Correlated with Treatment $\omega_1>0$ | Omitted Variable Negatively Correlated with Treatment $\omega_1<0$ |
 |:-------:|:------:|:------:|
 | **Omitted Variable Positively Correlated with Outcome**<br/>$\beta_2^f>0$ | Positive Bias<br />$\beta_2^f\cdot\omega_1>0$ | Negative Bias<br />$\beta_2^f\cdot\omega_1<0$ |
 | **Omitted Variable Negatively Correlated with Outcome**<br/>$\beta_2^f<0$ | Negative Bias<br />$\beta_2^f\cdot\omega_1<0$ | Positive Bias<br />$\beta_2^f\cdot\omega_1>0$ |
+
+### But what does controlling actually do?
+You've just learned that you can control for a variable by including it in your model, but what is happening under the hood? Let's consider a really simple system where $X$ causes $Y$ and $C$ causes both $X$ and $Y$. In this system, $C$ *confounds* the relationship between $X$ and $Y$. Furthermore, the relation ships are all linear and $C$ is a categorical variable with two levels. 
+
+$$
+\begin{aligned}
+&X = 3C + E_x\\
+&Y = -X + 6C + E_y\\
+&E_x, E_y\sim N(0,1)
+\end{aligned}
+$$
+When we control for $C$, we are extracting the variability in both $X$ and $Y$
+caused by $C$. Since $C$ is a categorical variable, it will create differences
+in group means: the observations that have $C=FALSE$ creates one group and
+$C=TRUE$ forms the other group. Because $C$ causes both $X$ and $Y$ there will
+be group mean differences in both $X$ and $Y$. The following code block
+demonstrates how we can create a dataset based on the relationships defined
+above and how we manually control for $C$.
+
+```{r}
+#| code-fold: false
+N <- 500
+set.seed(23) # make the data reproducible
+df <- tibble(
+  C = sample(c(FALSE, TRUE), N, replace=TRUE),
+  X = 3*C + rnorm(N),
+  Y = -X + 6*C + rnorm(N)
+) |> group_by(C) |> 
+  # since we're grouping on C, we're getting two means for X & Y, one for each
+  # level of C
+  mutate(
+    X.mean = mean(X), # This is the effect of C on X 
+    Y.mean = mean(Y), # This is the effect of C on Y
+  ) |> ungroup() |> 
+  # Now, we can extract the effect of C from each observation, we'll call these
+  # the residuals values of X and Y after extracting the effect of C.
+  mutate(
+    X.r = X - X.mean,
+    Y.r = Y - Y.mean
+  )
+
+r <- cor(df$X, df$Y)
+r_ctrl <- cor(df$X.r, df$Y.r)
+```
+
+We can see how the controlling in action by comparing the correlation of $X$ and
+$Y$ without controlling for $C$, $r=`r r`$ to the partial correlation of $X$ and
+$Y$ given $C$, $r = `r r_ctrl`$. Notice the dramatic difference in the
+correlation before and after controlling for $C$. The direction of the
+relationship completely changes. What's going on here?
+
+This is an example of 
+[Simpson's Paradox](https://en.wikipedia.org/wiki/Simpson%27s_paradox). The 
+first and second plots below reveal the paradox. In the third plot, the variance
+in $X$ associated with $C$ is extracted and in the fourth plot the variance in
+$Y$ associated with $C$ is extracted. With the effect of $C$ removed, the
+relationship between $X$ and $Y$ is revealed.
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+library(patchwork)
+library(latex2exp)
+theme_set(theme_bw())
+
+XC_means <- df |> summarise(.by = C, mu = mean(X)) |> pull(mu)
+YC_means <- df |> summarise(.by = C, mu = mean(Y)) |> pull(mu)
+plot_colours <- c("gold3", "steelblue")
+font_size <- 5
+
+p0 <- ggplot(df, aes(X,Y)) + geom_point() +
+  labs(title="The uncontrolled relationship between X and Y")
+
+p1 <- ggplot(df, aes(X,Y, colour=C)) + geom_point() +
+  geom_vline(xintercept=XC_means[1], colour=plot_colours[1], linewidth=1, linetype="dashed") + 
+  geom_vline(xintercept=XC_means[2], colour=plot_colours[2], linewidth=1, linetype="dashed") +
+  scale_colour_manual(values=plot_colours) +
+  annotate("text", label=TeX("$\\mu_{x|c=T}$"), x=3.45, y=-2, size=font_size, colour=plot_colours[2]) +
+  annotate("text", label=TeX("$\\mu_{x|c=F}$"), x=-0.35, y=-3, size=font_size, colour=plot_colours[1]) +
+  labs(title="The uncontrolled relationship between X and Y - highlighted groups")
+
+p2 <- ggplot(df, aes(X.r,Y, colour=C)) + geom_point() +
+  scale_colour_manual(values=plot_colours) +
+  geom_hline(yintercept=YC_means[1], colour=plot_colours[1], linewidth=1, linetype="dashed") + 
+  geom_hline(yintercept=YC_means[2], colour=plot_colours[2], linewidth=1, linetype="dashed") +
+  annotate("text", label=TeX("$\\mu_{y|c=T}$"), x=2.5, y=3.7, size=font_size, colour=plot_colours[2]) +
+  annotate("text", label=TeX("$\\mu_{y|c=F}$"), x=-2.75, y=-0.7, size=font_size, colour=plot_colours[1]) +
+  labs(x="X", title="After controlling for the effect of C on X")
+
+p3 <- ggplot(df, aes(X.r,Y.r, colour=C)) + geom_point() +
+  scale_colour_manual(values=plot_colours) +
+  labs(x="X", y="Y", title="After controlling for the effect of C on X & Y")
+
+p0/p1/p2/p3 + plot_layout(guides = "collect")
+```
 
 ## The Setup
 Imagine a situation where you are interesting in estimating the effect that a
@@ -394,6 +489,56 @@ uncontrolled, the confounders could bias the estimated treatment effect,
 resulting in spurious conclusions about the relationship under investigation.
 Even if a confounder has a parameter coefficient that is not reliably different
 to zero, it should be included in the effects model.
+
+```{r}
+#| fig-height: 8
+#| fig-width: 10
+library(patchwork)
+theme_set(theme_bw())
+N <- 500
+set.seed(23)
+df <- tibble(
+  C = sample(c(FALSE, TRUE), N, replace=TRUE),
+  X = 3*C + rnorm(N),
+  Y = -X + 6*C + rnorm(N)
+) |> group_by(C) |> 
+  mutate(
+    X.mean = mean(X),
+    Y.mean = mean(Y)
+  ) |> ungroup() |> 
+  mutate(
+    X.r = X - X.mean,
+    Y.r = Y - Y.mean
+  )
+
+cor(df$X, df$Y)
+cor(df$X.r, df$Y.r)
+
+XC_means <- df |> summarise(.by = C, mu = mean(X)) |> pull(mu)
+YC_means <- df |> summarise(.by = C, mu = mean(Y)) |> pull(mu)
+plot_colours <- c("gold3", "steelblue")
+
+p1 <- ggplot(df, aes(X,Y, colour=C)) + geom_point() +
+  geom_vline(xintercept=XC_means[1], colour=plot_colours[1], linewidth=1, linetype="dashed") + 
+  geom_vline(xintercept=XC_means[2], colour=plot_colours[2], linewidth=1, linetype="dashed") +
+  scale_colour_manual(values=plot_colours)
+
+p2 <- ggplot(df, aes(X.r,Y, colour=C)) + geom_point() +
+  scale_colour_manual(values=plot_colours) +
+  geom_hline(yintercept=YC_means[1], colour=plot_colours[1], linewidth=1, linetype="dashed") + 
+  geom_hline(yintercept=YC_means[2], colour=plot_colours[2], linewidth=1, linetype="dashed") +
+  labs(x="X")
+
+p3 <- ggplot(df, aes(X.r,Y.r, colour=C)) + geom_point() +
+  scale_colour_manual(values=plot_colours) +
+  labs(x="X", y="Y")
+
+p1/p2/p3 + plot_layout(guides = "collect")
+```
+
+
+
+
 
 ## References
 
