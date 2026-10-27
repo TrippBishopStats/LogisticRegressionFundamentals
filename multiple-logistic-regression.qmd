@@ -161,7 +161,6 @@ univariate_plot <- function(data, field, xlab, bins=30) {
 
 ```
 
-
 ### Categorical Variables
 There are three categorical variables in the dataset: `sex`, `smoker` and 
 `haschd`. All three are dichotomous (have two possible outcomes) variables. The

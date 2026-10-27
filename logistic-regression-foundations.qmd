@@ -84,7 +84,7 @@ plot of disease presence vs age could look like this:
 
 ```{r plot presence v age}
 #| fig-align: "center"
-#| fig-cap: "Presence/absence of coronary heart disease in $n=100$ patients aged 20 to 70 year."
+#| fig-cap: "Presence/absence of coronary heart disease in $n=100$ patients aged 20 to 70 years."
 #| fig-height: 2.5
 ggplot(chd, aes(x=Age, y=CHD)) + geom_point()
 ```
@@ -158,7 +158,7 @@ $$
 \text{odds}=\frac{\pi}{1-\pi}.\tag{1}
 $$
 If we rearrange Equation 1, we get an expression for the probability of the 
-event, $\pi$ in terms of the odds,
+event, $\pi$, in terms of the odds,
 $$
 \pi = \frac{\text{odds}}{1 + \text{odds}}.\tag{2}
 $$
@@ -186,10 +186,10 @@ let $\text{odds}=e^x$, then
 $$
 \pi = \frac{e^x}{1+e^x}.
 $$
-This is a good, start, but what we really want is the conditional probability of the outcome, $Y$, given 
-some set of predictors. If we have collected data on the
+This is a good start, but what we really want is the conditional probability of
+the outcome, $Y$, given some set of predictors. If we have collected data on the
 outcome variable and $p$ predictors, then we could replace the placeholder $x$
-in the equation above with the expression 
+in the equation above with the expression
 $\beta_0 + \beta_1x_1 + \cdots + \beta_px_p$. Now, the probability equation is
 $$
 \pi_i = \frac{e^{\beta_0 + \beta_1x_{1,i} + \cdots + \beta_px_{p,i}}}{1+e^{\beta_0 + 
@@ -230,9 +230,9 @@ $$
 $$
 If we take the log of both sides of the equation, 
 $$
-\log\bigg(\frac{\pi}{1-\pi}\bigg)=\log(e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p})= \beta_0 + \beta_1x_1 + \cdots + \beta_px_p,
+\log\bigg(\frac{\pi}{1-\pi}\bigg)=\log(e^{\beta_0 + \beta_1x_1 + \cdots + \beta_px_p})= \beta_0 + \beta_1x_1 + \cdots + \beta_px_p.
 $$
-we have a function of the log odds that is linear in terms of the
+Now we have a function of the log odds that is linear in terms of the
 parameters $\beta_i$. The expression on the left side of the equation is often
 called the logit and it is common to see the above equation written as
 $$
@@ -245,8 +245,8 @@ predicts the presence of CHD in a high risk population of adults using their age
 as the explanatory variable. The formal model will be
 $$
 \begin{aligned}
-Y_i&\sim bin(1, \pi_i)\\[0.25cm]
-\pi_i &= \frac{\exp(\eta_i)}{1+\exp(\eta_i)}=\frac{1}{1 + \exp(-\eta_i)}\\[0.25cm]
+Y_i&\sim Bern(\pi_i)\\[0.25cm]
+E(Y_i) &= \pi_i = \frac{\exp(\eta_i)}{1+\exp(\eta_i)}=\frac{1}{1 + \exp(-\eta_i)}\\[0.25cm]
 \eta_i &= \beta_0 + \beta_1\cdot Age_i.
 \end{aligned}
 $$
